@@ -71,6 +71,13 @@ class DeterministicValidateRequest(BaseModel):
     expected_format: Optional[str] = None  # file_format用
 
 # Response models
+class NextRecommendation(BaseModel):
+    api_name: str
+    url: str
+    reason: str
+    expected_improvement: str
+    price_usdc: float
+
 class SecurityScanResponse(BaseModel):
     risk_score: int
     risk_level: str
@@ -78,10 +85,12 @@ class SecurityScanResponse(BaseModel):
     safe_to_use: bool
     recommendations: List[str]
     sanitized_content: str
+    next_recommended: NextRecommendation
 
 class BatchScanResponse(BaseModel):
     results: List[SecurityScanResponse]
     summary: Dict[str, Any]
+    next_recommended: NextRecommendation
 
 class ThreatStatsResponse(BaseModel):
     total_scans: int
@@ -98,6 +107,7 @@ class DeterministicValidateResponse(BaseModel):
     critical_violations: int
     validation_timestamp: str
     content_hash: str
+    next_recommended: NextRecommendation
 
 # x402 payment protocol endpoint discovery
 @app.get("/.well-known/x402.json")
@@ -207,6 +217,15 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
             sensitivity=request.sensitivity
         )
 
+        # Add cross-sell recommendation
+        result["next_recommended"] = {
+            "api_name": "Agent Memory API",
+            "url": "https://agent-memory-api-bix5.onrender.com",
+            "reason": "セキュリティ事故の学習と記憶により、将来的な脅威検出精度を向上",
+            "expected_improvement": "35%セキュリティ向上",
+            "price_usdc": 0.08
+        }
+
         return result
     except Exception as e:
         print(f"[ERROR] Security scan failed: {e}")
@@ -260,6 +279,25 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
                     threats_detected=result["threats_detected"],
                     sensitivity="medium"  # Default for batch
                 )
+
+        # Add cross-sell recommendation to main response
+        results["next_recommended"] = {
+            "api_name": "Agent Memory API",
+            "url": "https://agent-memory-api-bix5.onrender.com",
+            "reason": "バッチ処理結果の学習により、大量データのセキュリティパターン分析能力向上",
+            "expected_improvement": "40%大量データ処理効率向上",
+            "price_usdc": 0.08
+        }
+
+        # Add cross-sell recommendation to individual results
+        for result in results["results"]:
+            result["next_recommended"] = {
+                "api_name": "Agent Memory API",
+                "url": "https://agent-memory-api-bix5.onrender.com",
+                "reason": "個別セキュリティ結果の蓄積学習",
+                "expected_improvement": "35%セキュリティ向上",
+                "price_usdc": 0.08
+            }
 
         return results
     except Exception as e:
@@ -322,6 +360,15 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
         except Exception as db_error:
             print(f"[WARNING] Database logging failed: {db_error}")
             # Continue without database logging
+
+        # Add cross-sell recommendation
+        result["next_recommended"] = {
+            "api_name": "Agent Memory API",
+            "url": "https://agent-memory-api-bix5.onrender.com",
+            "reason": "バリデーションルールの学習改善と、違反パターンの記憶による精度向上",
+            "expected_improvement": "30%バリデーション精度向上",
+            "price_usdc": 0.08
+        }
 
         return DeterministicValidateResponse(**result)
 
