@@ -17,6 +17,7 @@ import traceback
 
 from payment_verifier import PaymentVerifier
 from security_engine import SecurityEngine
+from deterministic_validator import DeterministicValidator
 from database import security_db
 
 # Environment variables
@@ -43,6 +44,7 @@ app.add_middleware(
 # Initialize components
 payment_verifier = PaymentVerifier()
 security_engine = SecurityEngine()
+deterministic_validator = DeterministicValidator()
 
 # Startup event
 @app.on_event("startup")
@@ -59,6 +61,11 @@ class SecurityScanRequest(BaseModel):
 class BatchScanRequest(BaseModel):
     contents: List[str]
     content_type: str = "text"
+
+class DeterministicValidateRequest(BaseModel):
+    content: str
+    rules: List[str] = ["no_api_keys", "no_personal_info", "valid_url", "valid_json", "budget_limit", "file_format"]
+    strict_mode: bool = True
 
 # Response models
 class SecurityScanResponse(BaseModel):
@@ -78,6 +85,16 @@ class ThreatStatsResponse(BaseModel):
     threats_by_type: Dict[str, int]
     risk_distribution: Dict[str, int]
     top_threats: List[Dict[str, Any]]
+
+class DeterministicValidateResponse(BaseModel):
+    passed: bool
+    violations: List[Dict[str, Any]]
+    deterministic: bool = True
+    ai_used: bool = False
+    total_violations: int
+    critical_violations: int
+    validation_timestamp: str
+    content_hash: str
 
 # x402 payment protocol endpoint discovery
 @app.get("/.well-known/x402.json")
@@ -117,6 +134,23 @@ async def x402_discovery():
                         "discoverable": True,
                         "language": ["ja", "en"],
                         "specialization": "batch-security-analysis"
+                    }
+                }
+            },
+            {
+                "path": "/api/validate/deterministic",
+                "method": "POST",
+                "price": "0.03",
+                "currency": "USDC",
+                "network": "base",
+                "description": "決定論的バリデーション - ルールベースコンテンツ検証",
+                "category": "validation",
+                "tags": ["validation", "deterministic", "rule-based", "security", "compliance"],
+                "extensions": {
+                    "bazaar": {
+                        "discoverable": True,
+                        "language": ["ja", "en"],
+                        "specialization": "deterministic-validation"
                     }
                 }
             }
@@ -229,6 +263,66 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
         print(f"[ERROR] Batch security scan failed: {e}")
         raise HTTPException(status_code=500, detail=f"Batch security scan failed: {str(e)}")
 
+@app.post("/api/validate/deterministic", response_model=DeterministicValidateResponse)
+async def deterministic_validate(request: DeterministicValidateRequest, http_request: Request):
+    """決定論的バリデーション - AIを使わないルールベース検証 (0.03 USDC)"""
+
+    # Skip payment verification in test mode
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "x402Version": 1,
+                    "accepts": [{
+                        "scheme": "exact",
+                        "network": "base",
+                        "maxAmountRequired": "30000",  # 0.03 USDC
+                        "resource": f"{http_request.url}",
+                        "description": "Deterministic Validation - 決定論的バリデーション",
+                        "mimeType": "application/json",
+                        "payTo": WALLET_ADDRESS,
+                        "maxTimeoutSeconds": 300,
+                        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        "extra": {"name": "USDC", "version": "2"}
+                    }]
+                }
+            )
+
+        is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
+        if not is_valid:
+            raise HTTPException(status_code=402, detail="Payment verification failed")
+
+    try:
+        # 決定論的バリデーション実行
+        result = deterministic_validator.validate_content(
+            content=request.content,
+            rules=request.rules,
+            strict_mode=request.strict_mode
+        )
+
+        # バリデーション結果をデータベースに記録 (エラー時は継続)
+        try:
+            await security_db.log_validation_result(
+                content_hash=result["content_hash"],
+                rules_applied=request.rules,
+                passed=result["passed"],
+                violation_count=result["total_violations"],
+                strict_mode=request.strict_mode,
+                violations=result["violations"],
+                critical_violations=result["critical_violations"]
+            )
+        except Exception as db_error:
+            print(f"[WARNING] Database logging failed: {db_error}")
+            # Continue without database logging
+
+        return DeterministicValidateResponse(**result)
+
+    except Exception as e:
+        print(f"[ERROR] Deterministic validation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Deterministic validation failed: {str(e)}")
+
 @app.get("/api/security/threats", response_model=ThreatStatsResponse)
 async def get_threat_stats():
     """Get threat detection statistics (free endpoint)"""
@@ -285,13 +379,15 @@ async def root():
         "endpoints": {
             "security_scan": "/api/security/scan",
             "batch_scan": "/api/security/batch",
+            "deterministic_validate": "/api/validate/deterministic",
             "threat_stats": "/api/security/threats",
             "health": "/health",
             "discovery": "/.well-known/x402.json"
         },
         "pricing": {
             "security_scan": f"{PRICE_USDC} USDC",
-            "batch_scan": "0.10 USDC"
+            "batch_scan": "0.10 USDC",
+            "deterministic_validate": "0.03 USDC"
         },
         "network": NETWORK,
         "currency": "USDC",
@@ -307,6 +403,7 @@ async def root():
         "features": [
             "Real-time Security Scanning",
             "Batch Processing",
+            "Deterministic Rule-based Validation",
             "Threat Classification",
             "Content Sanitization",
             "Risk Assessment",

@@ -95,6 +95,29 @@ class SecurityDatabase:
 
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_summary_date ON daily_summary(summary_date)")
 
+            # Create validation_logs table for deterministic validation
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS validation_logs (
+                    id SERIAL PRIMARY KEY,
+                    content_hash VARCHAR(255) NOT NULL,
+                    rules_applied TEXT NOT NULL,
+                    passed BOOLEAN NOT NULL,
+                    violation_count INTEGER DEFAULT 0,
+                    critical_violations INTEGER DEFAULT 0,
+                    strict_mode BOOLEAN DEFAULT TRUE,
+                    violations JSONB DEFAULT '[]',
+                    validation_timestamp TIMESTAMP DEFAULT NOW(),
+                    client_ip VARCHAR(45),
+                    metadata JSONB DEFAULT '{}'
+                )
+            """)
+
+            # Create indexes for validation_logs
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_validation_logs_timestamp ON validation_logs(validation_timestamp)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_validation_logs_content_hash ON validation_logs(content_hash)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_validation_logs_passed ON validation_logs(passed)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_validation_logs_violations_gin ON validation_logs USING GIN (violations)")
+
             print("[OK] PostgreSQL database initialized with all tables and indexes")
 
         finally:
@@ -137,6 +160,42 @@ class SecurityDatabase:
 
             # Update daily summary
             await self._update_daily_summary(conn, risk_score, threats_detected)
+
+            return log_id
+
+        finally:
+            await conn.close()
+
+    async def log_validation_result(self, content_hash: str, rules_applied: List[str],
+                                  passed: bool, violation_count: int,
+                                  strict_mode: bool = True, violations: List[Dict] = None,
+                                  critical_violations: int = 0, client_ip: str = None) -> int:
+        """
+        Log deterministic validation result
+
+        Args:
+            content_hash: Hash of validated content
+            rules_applied: List of applied validation rules
+            passed: Whether validation passed
+            violation_count: Total number of violations
+            strict_mode: Whether strict mode was used
+            violations: List of violation details
+            critical_violations: Number of critical violations
+            client_ip: Client IP address
+
+        Returns:
+            Log ID
+        """
+        conn = await self.get_connection()
+        try:
+            # Insert validation log
+            log_id = await conn.fetchval("""
+                INSERT INTO validation_logs (content_hash, rules_applied, passed, violation_count,
+                                           critical_violations, strict_mode, violations, client_ip)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+            """, content_hash, json.dumps(rules_applied), passed, violation_count,
+                critical_violations, strict_mode, json.dumps(violations or []), client_ip)
 
             return log_id
 
