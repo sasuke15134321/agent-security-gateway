@@ -66,6 +66,9 @@ class DeterministicValidateRequest(BaseModel):
     content: str
     rules: List[str] = ["no_api_keys", "no_personal_info", "valid_url", "valid_json", "budget_limit", "file_format"]
     strict_mode: bool = True
+    amount_usdc: Optional[float] = None  # budget_limit用
+    daily_limit: Optional[float] = None  # budget_limit用
+    expected_format: Optional[str] = None  # file_format用
 
 # Response models
 class SecurityScanResponse(BaseModel):
@@ -295,10 +298,13 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
             raise HTTPException(status_code=402, detail="Payment verification failed")
 
     try:
-        # 決定論的バリデーション実行
+        # 決定論的バリデーション実行 - AIを使わない
         result = deterministic_validator.validate_content(
             content=request.content,
             rules=request.rules,
+            amount_usdc=request.amount_usdc,
+            daily_limit=request.daily_limit,
+            expected_format=request.expected_format,
             strict_mode=request.strict_mode
         )
 
