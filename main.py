@@ -110,6 +110,18 @@ class DeterministicValidateResponse(BaseModel):
     next_recommended: NextRecommendation
 
 # x402 payment protocol endpoint discovery
+@app.get("/ai-agent-policy")
+async def get_agent_policy():
+    """Get AI agent policy information"""
+    try:
+        with open("ai-agent-policy.json", "r", encoding="utf-8") as f:
+            policy = json.load(f)
+        return policy
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Agent policy file not found")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Invalid policy file format")
+
 @app.get("/.well-known/x402.json")
 async def x402_discovery():
     """x402 protocol endpoint discovery for Agentic.Market"""
