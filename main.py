@@ -122,6 +122,16 @@ async def get_agent_policy():
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid policy file format")
 
+@app.get("/.well-known/ai-agent-policy")
+async def ai_agent_policy():
+    import json
+    import os
+    policy_path = "ai-agent-policy.json"
+    if os.path.exists(policy_path):
+        with open(policy_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"error": "Policy not found"}
+
 @app.get("/.well-known/x402.json")
 async def x402_discovery():
     """x402 protocol endpoint discovery for Agentic.Market"""
