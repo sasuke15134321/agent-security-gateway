@@ -11,6 +11,7 @@ load_dotenv()
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
@@ -44,6 +45,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_PAID_ENDPOINTS = {
+    ("POST", "/api/security/scan"):          PRICE_USDC,
+    ("POST", "/api/security/batch"):         "0.10",
+    ("POST", "/api/validate/deterministic"): "0.03",
+    ("POST", "/api/security/pre-payment"):   "0.03",
+    ("POST", "/api/validate/completeness"):  "0.03",
+    ("POST", "/api/validate/list_check"):    "0.01",
+}
+
+@app.middleware("http")
+async def x402_payment_middleware(request: Request, call_next):
+    price = _PAID_ENDPOINTS.get((request.method, request.url.path))
+    if not TEST_MODE and price is not None:
+        if not request.headers.get("X-PAYMENT"):
+            return JSONResponse(status_code=402, content={
+                "error": "Payment Required",
+                "price": price,
+                "currency": "USDC",
+                "network": "base-mainnet",
+                "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE",
+                "endpoint": request.url.path
+            })
+    return await call_next(request)
 
 # Initialize components
 payment_verifier = PaymentVerifier()
