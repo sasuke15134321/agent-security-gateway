@@ -18,6 +18,7 @@ import traceback
 from payment_verifier import PaymentVerifier
 from security_engine import SecurityEngine
 from deterministic_validator import DeterministicValidator
+from pre_payment_checker import PrePaymentChecker
 from database import security_db
 
 # Environment variables
@@ -45,6 +46,7 @@ app.add_middleware(
 payment_verifier = PaymentVerifier()
 security_engine = SecurityEngine()
 deterministic_validator = DeterministicValidator()
+pre_payment_checker = PrePaymentChecker()
 
 # Startup event
 @app.on_event("startup")
@@ -61,6 +63,12 @@ class SecurityScanRequest(BaseModel):
 class BatchScanRequest(BaseModel):
     contents: List[str]
     content_type: str = "text"
+
+class PrePaymentRequest(BaseModel):
+    api_url: str
+    amount_usdc: float
+    api_response_preview: str = ""
+    agent_id: str
 
 class DeterministicValidateRequest(BaseModel):
     content: str
@@ -186,6 +194,23 @@ async def x402_discovery():
                         "discoverable": True,
                         "language": ["ja", "en"],
                         "specialization": "deterministic-validation"
+                    }
+                }
+            },
+            {
+                "path": "/api/security/pre-payment",
+                "method": "POST",
+                "price": "0.03",
+                "currency": "USDC",
+                "network": "base",
+                "description": "x402支払い前セキュリティチェック - URL評価・価格妥当性・連続支払い検出・詐欺パターン検出",
+                "category": "security",
+                "tags": ["x402", "payment", "pre-check", "fraud-detection", "url-reputation"],
+                "extensions": {
+                    "bazaar": {
+                        "discoverable": True,
+                        "language": ["ja", "en"],
+                        "specialization": "x402-pre-payment-security"
                     }
                 }
             }
@@ -398,6 +423,88 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
         print(f"[ERROR] Deterministic validation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Deterministic validation failed: {str(e)}")
 
+@app.post("/api/security/pre-payment")
+async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
+    """x402支払い前セキュリティチェック (0.03 USDC)"""
+
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "x402Version": 1,
+                    "accepts": [{
+                        "scheme": "exact",
+                        "network": "base",
+                        "maxAmountRequired": "30000",  # 0.03 USDC
+                        "resource": f"{http_request.url}",
+                        "description": "Pre-Payment Security Check - x402支払い前チェック",
+                        "mimeType": "application/json",
+                        "payTo": WALLET_ADDRESS,
+                        "maxTimeoutSeconds": 300,
+                        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        "extra": {"name": "USDC", "version": "2"}
+                    }]
+                }
+            )
+
+        is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
+        if not is_valid:
+            raise HTTPException(status_code=402, detail="Payment verification failed")
+
+    try:
+        import urllib.parse
+        api_domain = urllib.parse.urlparse(request.api_url).hostname or request.api_url
+
+        # Fetch recent payment checks for this agent (last 1 hour)
+        try:
+            recent_calls = await security_db.get_recent_payment_checks(
+                agent_id=request.agent_id, hours=1
+            )
+        except Exception:
+            recent_calls = []
+
+        # Run pre-payment checks (deterministic, no AI)
+        result = pre_payment_checker.check(
+            api_url=request.api_url,
+            amount_usdc=request.amount_usdc,
+            api_response_preview=request.api_response_preview,
+            agent_id=request.agent_id,
+            recent_calls=recent_calls,
+        )
+
+        # Log this check for future repeat-detection
+        try:
+            await security_db.log_payment_check(
+                agent_id=request.agent_id,
+                api_url=request.api_url,
+                api_domain=api_domain,
+                amount_usdc=request.amount_usdc,
+                safe_to_pay=result["safe_to_pay"],
+                risk_score=result["risk_score"],
+                recommended_action=result["recommended_action"],
+                warnings=result["warnings"],
+            )
+        except Exception as db_err:
+            print(f"[WARN] Could not log payment check: {db_err}")
+
+        # Cross-sell: recommend agent-budget-guard for full budget control
+        result["next_recommended"] = {
+            "api_name": "Agent Budget Guard",
+            "url": "https://agent-budget-guard.onrender.com",
+            "reason": "完全な予算管理と支払い上限設定のために agent-budget-guard を使用してください",
+            "expected_improvement": "AIエージェントの支出を完全にコントロール",
+            "price_usdc": 0.03
+        }
+
+        return result
+
+    except Exception as e:
+        print(f"[ERROR] Pre-payment check failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Pre-payment check failed: {str(e)}")
+
+
 @app.get("/api/security/threats", response_model=ThreatStatsResponse)
 async def get_threat_stats():
     """Get threat detection statistics (free endpoint)"""
@@ -454,6 +561,7 @@ async def root():
         "endpoints": {
             "security_scan": "/api/security/scan",
             "batch_scan": "/api/security/batch",
+            "pre_payment_check": "/api/security/pre-payment",
             "deterministic_validate": "/api/validate/deterministic",
             "threat_stats": "/api/security/threats",
             "health": "/health",
@@ -462,6 +570,7 @@ async def root():
         "pricing": {
             "security_scan": f"{PRICE_USDC} USDC",
             "batch_scan": "0.10 USDC",
+            "pre_payment_check": "0.03 USDC",
             "deterministic_validate": "0.03 USDC"
         },
         "network": NETWORK,
@@ -478,6 +587,10 @@ async def root():
         "features": [
             "Real-time Security Scanning",
             "Batch Processing",
+            "x402 Pre-Payment Security Check",
+            "Consecutive Payment Detection",
+            "URL Reputation Analysis",
+            "Fraud Pattern Detection",
             "Deterministic Rule-based Validation",
             "Threat Classification",
             "Content Sanitization",

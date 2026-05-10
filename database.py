@@ -118,6 +118,26 @@ class SecurityDatabase:
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_validation_logs_passed ON validation_logs(passed)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_validation_logs_violations_gin ON validation_logs USING GIN (violations)")
 
+            # Create payment_check_logs table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS payment_check_logs (
+                    id SERIAL PRIMARY KEY,
+                    agent_id VARCHAR(255) NOT NULL,
+                    api_url TEXT NOT NULL,
+                    api_domain VARCHAR(255) NOT NULL,
+                    amount_usdc FLOAT NOT NULL,
+                    safe_to_pay BOOLEAN NOT NULL,
+                    risk_score INTEGER NOT NULL,
+                    recommended_action VARCHAR(20) NOT NULL,
+                    warnings JSONB DEFAULT '[]',
+                    checked_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_check_agent_id ON payment_check_logs(agent_id)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_check_api_domain ON payment_check_logs(api_domain)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_check_checked_at ON payment_check_logs(checked_at)")
+
             print("[OK] PostgreSQL database initialized with all tables and indexes")
 
         finally:
@@ -272,6 +292,61 @@ class SecurityDatabase:
             return "medium"
         else:
             return "low"
+
+    async def log_payment_check(
+        self,
+        agent_id: str,
+        api_url: str,
+        api_domain: str,
+        amount_usdc: float,
+        safe_to_pay: bool,
+        risk_score: int,
+        recommended_action: str,
+        warnings: List[str],
+    ) -> int:
+        """Log a pre-payment check result for repeat-call detection."""
+        conn = await self.get_connection()
+        try:
+            log_id = await conn.fetchval("""
+                INSERT INTO payment_check_logs
+                    (agent_id, api_url, api_domain, amount_usdc,
+                     safe_to_pay, risk_score, recommended_action, warnings)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+            """, agent_id, api_url, api_domain, amount_usdc,
+                safe_to_pay, risk_score, recommended_action, json.dumps(warnings))
+            return log_id
+        finally:
+            await conn.close()
+
+    async def get_recent_payment_checks(
+        self, agent_id: str, hours: int = 1
+    ) -> List[Dict[str, Any]]:
+        """Return payment checks for an agent within the last N hours."""
+        conn = await self.get_connection()
+        try:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            rows = await conn.fetch("""
+                SELECT api_url, api_domain, amount_usdc, safe_to_pay,
+                       risk_score, recommended_action, checked_at
+                FROM payment_check_logs
+                WHERE agent_id = $1 AND checked_at >= $2
+                ORDER BY checked_at DESC
+            """, agent_id, cutoff)
+            return [
+                {
+                    "api_url": row["api_url"],
+                    "api_domain": row["api_domain"],
+                    "amount_usdc": row["amount_usdc"],
+                    "safe_to_pay": row["safe_to_pay"],
+                    "risk_score": row["risk_score"],
+                    "recommended_action": row["recommended_action"],
+                    "checked_at": row["checked_at"].isoformat(),
+                }
+                for row in rows
+            ]
+        finally:
+            await conn.close()
 
     async def get_threat_statistics(self) -> Dict[str, Any]:
         """Get threat detection statistics"""
