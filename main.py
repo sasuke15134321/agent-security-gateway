@@ -6,6 +6,9 @@ FastAPI server with x402 payment protocol for AI security scanning and threat de
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -51,8 +54,12 @@ pre_payment_checker = PrePaymentChecker()
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    await security_db.initialize()
-    print("[OK] Agent Security Gateway Lite API startup complete")
+    try:
+        await security_db.initialize()
+        print("[OK] Agent Security Gateway Lite API startup complete")
+    except Exception as e:
+        print(f"[WARN] Database initialization failed (continuing without DB): {e}")
+        print("[OK] Agent Security Gateway Lite API started in DB-less mode")
 
 # Request models
 class SecurityScanRequest(BaseModel):
