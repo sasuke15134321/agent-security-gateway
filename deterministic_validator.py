@@ -252,6 +252,105 @@ class DeterministicValidator:
 
         return violations
 
+    def check_completeness(
+        self,
+        task: str,
+        expected_items: List[str],
+        actual_items: List[str],
+        match_type: str = "exact",
+    ) -> Dict[str, Any]:
+        """
+        アイテムリストの完全性チェック（決定論的・AI不使用）
+
+        match_type:
+          exact    - 完全一致
+          contains - expected が actual のいずれかに部分一致
+          pattern  - expected を正規表現として actual に照合
+        """
+        missing_items: List[str] = []
+        matched_expected: List[str] = []
+
+        for expected in expected_items:
+            matched = False
+
+            if match_type == "exact":
+                matched = expected in actual_items
+
+            elif match_type == "contains":
+                matched = any(expected in actual for actual in actual_items)
+
+            elif match_type == "pattern":
+                try:
+                    pattern = re.compile(expected, re.IGNORECASE)
+                    matched = any(pattern.search(actual) for actual in actual_items)
+                except re.error:
+                    # 不正な正規表現は exact fallback
+                    matched = expected in actual_items
+
+            if matched:
+                matched_expected.append(expected)
+            else:
+                missing_items.append(expected)
+
+        # extra_items: actual にあって expected にないもの（exact のみ算出）
+        extra_items: List[str] = []
+        if match_type == "exact":
+            extra_items = [a for a in actual_items if a not in expected_items]
+
+        total_expected = len(expected_items)
+        total_actual = len(actual_items)
+        matched_count = len(matched_expected)
+
+        completeness_score = int(matched_count / total_expected * 100) if total_expected > 0 else 100
+
+        if completeness_score == 100:
+            verdict = "PASS"
+        elif completeness_score >= 80:
+            verdict = "WARNING"
+        else:
+            verdict = "FAIL"
+
+        return {
+            "complete": completeness_score == 100,
+            "completeness_score": completeness_score,
+            "missing_items": missing_items,
+            "extra_items": extra_items,
+            "total_expected": total_expected,
+            "total_actual": total_actual,
+            "matched_count": matched_count,
+            "match_type": match_type,
+            "task": task,
+            "verdict": verdict,
+            "deterministic": True,
+            "ai_used": False,
+            "validation_timestamp": datetime.now().isoformat(),
+        }
+
+    def check_list_count(
+        self,
+        expected_count: int,
+        actual_count: int,
+        label: str = "",
+    ) -> Dict[str, Any]:
+        """
+        件数一致チェック（決定論的・AI不使用）
+        """
+        match = expected_count == actual_count
+        difference = abs(actual_count - expected_count)
+        verdict = "PASS" if match else "FAIL"
+
+        return {
+            "match": match,
+            "difference": difference,
+            "expected_count": expected_count,
+            "actual_count": actual_count,
+            "label": label,
+            "verdict": verdict,
+            "deterministic": True,
+            "ai_used": False,
+            "validation_timestamp": datetime.now().isoformat(),
+        }
+
     def _hash_content(self, content: str) -> str:
         """コンテンツハッシュ生成 - 数学的ハッシュ計算"""
         return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]

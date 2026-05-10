@@ -85,6 +85,17 @@ class DeterministicValidateRequest(BaseModel):
     daily_limit: Optional[float] = None  # budget_limit用
     expected_format: Optional[str] = None  # file_format用
 
+class CompletenessRequest(BaseModel):
+    task: str
+    expected_items: List[str]
+    actual_items: List[str]
+    match_type: str = "exact"  # exact, contains, pattern
+
+class ListCheckRequest(BaseModel):
+    expected_count: int
+    actual_count: int
+    label: str = ""
+
 # Response models
 class NextRecommendation(BaseModel):
     api_name: str
@@ -218,6 +229,40 @@ async def x402_discovery():
                         "discoverable": True,
                         "language": ["ja", "en"],
                         "specialization": "x402-pre-payment-security"
+                    }
+                }
+            },
+            {
+                "path": "/api/validate/completeness",
+                "method": "POST",
+                "price": "0.03",
+                "currency": "USDC",
+                "network": "base",
+                "description": "完全性チェック - タスク完了アイテムの網羅性検証（exact/contains/pattern）",
+                "category": "validation",
+                "tags": ["validation", "completeness", "checklist", "deterministic", "task-verification"],
+                "extensions": {
+                    "bazaar": {
+                        "discoverable": True,
+                        "language": ["ja", "en"],
+                        "specialization": "completeness-validation"
+                    }
+                }
+            },
+            {
+                "path": "/api/validate/list_check",
+                "method": "POST",
+                "price": "0.01",
+                "currency": "USDC",
+                "network": "base",
+                "description": "件数一致チェック - 期待件数と実際件数の一致検証",
+                "category": "validation",
+                "tags": ["validation", "count-check", "deterministic", "list-verification"],
+                "extensions": {
+                    "bazaar": {
+                        "discoverable": True,
+                        "language": ["ja", "en"],
+                        "specialization": "list-count-validation"
                     }
                 }
             }
@@ -512,6 +557,111 @@ async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=f"Pre-payment check failed: {str(e)}")
 
 
+@app.post("/api/validate/completeness")
+async def validate_completeness(request: CompletenessRequest, http_request: Request):
+    """完全性チェック - タスク完了アイテムの網羅性検証 (0.03 USDC)"""
+
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "x402Version": 1,
+                    "accepts": [{
+                        "scheme": "exact",
+                        "network": "base",
+                        "maxAmountRequired": "30000",  # 0.03 USDC
+                        "resource": f"{http_request.url}",
+                        "description": "Completeness Validation - 完全性チェック",
+                        "mimeType": "application/json",
+                        "payTo": WALLET_ADDRESS,
+                        "maxTimeoutSeconds": 300,
+                        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        "extra": {"name": "USDC", "version": "2"}
+                    }]
+                }
+            )
+
+        is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
+        if not is_valid:
+            raise HTTPException(status_code=402, detail="Payment verification failed")
+
+    try:
+        result = deterministic_validator.check_completeness(
+            task=request.task,
+            expected_items=request.expected_items,
+            actual_items=request.actual_items,
+            match_type=request.match_type,
+        )
+
+        result["next_recommended"] = {
+            "api_name": "Agent Memory API",
+            "url": "https://agent-memory-api-bix5.onrender.com",
+            "reason": "タスク完了状況の記憶と長期トラッキングにより、継続的な品質改善を実現",
+            "expected_improvement": "30%タスク完了率向上",
+            "price_usdc": 0.08
+        }
+
+        return result
+
+    except Exception as e:
+        print(f"[ERROR] Completeness validation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Completeness validation failed: {str(e)}")
+
+
+@app.post("/api/validate/list_check")
+async def validate_list_check(request: ListCheckRequest, http_request: Request):
+    """件数一致チェック - 期待件数と実際件数の一致検証 (0.01 USDC)"""
+
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "x402Version": 1,
+                    "accepts": [{
+                        "scheme": "exact",
+                        "network": "base",
+                        "maxAmountRequired": "10000",  # 0.01 USDC
+                        "resource": f"{http_request.url}",
+                        "description": "List Count Check - 件数一致チェック",
+                        "mimeType": "application/json",
+                        "payTo": WALLET_ADDRESS,
+                        "maxTimeoutSeconds": 300,
+                        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        "extra": {"name": "USDC", "version": "2"}
+                    }]
+                }
+            )
+
+        is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.01")
+        if not is_valid:
+            raise HTTPException(status_code=402, detail="Payment verification failed")
+
+    try:
+        result = deterministic_validator.check_list_count(
+            expected_count=request.expected_count,
+            actual_count=request.actual_count,
+            label=request.label,
+        )
+
+        result["next_recommended"] = {
+            "api_name": "Agent Security Gateway",
+            "url": "https://agent-security-api.onrender.com",
+            "reason": "件数チェック後、コンテンツの完全なセキュリティスキャンで品質を確保",
+            "expected_improvement": "25%品質保証向上",
+            "price_usdc": 0.05
+        }
+
+        return result
+
+    except Exception as e:
+        print(f"[ERROR] List count check failed: {e}")
+        raise HTTPException(status_code=500, detail=f"List count check failed: {str(e)}")
+
+
 @app.get("/api/security/threats", response_model=ThreatStatsResponse)
 async def get_threat_stats():
     """Get threat detection statistics (free endpoint)"""
@@ -570,6 +720,8 @@ async def root():
             "batch_scan": "/api/security/batch",
             "pre_payment_check": "/api/security/pre-payment",
             "deterministic_validate": "/api/validate/deterministic",
+            "completeness_check": "/api/validate/completeness",
+            "list_count_check": "/api/validate/list_check",
             "threat_stats": "/api/security/threats",
             "health": "/health",
             "discovery": "/.well-known/x402.json"
@@ -578,7 +730,9 @@ async def root():
             "security_scan": f"{PRICE_USDC} USDC",
             "batch_scan": "0.10 USDC",
             "pre_payment_check": "0.03 USDC",
-            "deterministic_validate": "0.03 USDC"
+            "deterministic_validate": "0.03 USDC",
+            "completeness_check": "0.03 USDC",
+            "list_count_check": "0.01 USDC"
         },
         "network": NETWORK,
         "currency": "USDC",
