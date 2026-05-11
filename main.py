@@ -173,6 +173,28 @@ async def get_agent_policy():
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid policy file format")
 
+@app.get("/.well-known/mcp/server-card.json")
+async def mcp_server_card():
+    """Smithery MCP server card - allows Smithery to discover tools without MCP protocol scan"""
+    return {
+        "name": "agent-security-gateway",
+        "description": "Japanese prompt injection detection and x402 pre-payment security check API",
+        "tools": [
+            {
+                "name": "security_scan",
+                "description": "Scan text for prompt injection and threats"
+            },
+            {
+                "name": "pre_payment_check",
+                "description": "Check API safety before x402 payment"
+            },
+            {
+                "name": "validate_completeness",
+                "description": "Validate task completeness deterministically"
+            }
+        ]
+    }
+
 @app.get("/.well-known/ai-agent-policy")
 async def ai_agent_policy():
     import json
