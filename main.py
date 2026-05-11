@@ -177,20 +177,69 @@ async def get_agent_policy():
 async def mcp_server_card():
     """Smithery MCP server card - allows Smithery to discover tools without MCP protocol scan"""
     return {
-        "name": "agent-security-gateway",
-        "description": "Japanese prompt injection detection and x402 pre-payment security check API",
+        "serverInfo": {
+            "name": "agent-security-gateway",
+            "version": "1.0.0"
+        },
         "tools": [
             {
                 "name": "security_scan",
-                "description": "Scan text for prompt injection and threats"
+                "description": "Scan text for prompt injection and threats",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string"},
+                        "content_type": {
+                            "type": "string",
+                            "enum": ["text", "code", "prompt", "message"],
+                            "default": "text"
+                        },
+                        "sensitivity": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "critical"],
+                            "default": "medium"
+                        }
+                    },
+                    "required": ["content"]
+                }
             },
             {
                 "name": "pre_payment_check",
-                "description": "Check API safety before x402 payment"
+                "description": "Check API safety before x402 payment",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "api_url": {"type": "string"},
+                        "amount_usdc": {"type": "number"},
+                        "agent_id": {"type": "string"},
+                        "api_response_preview": {"type": "string", "default": ""}
+                    },
+                    "required": ["api_url", "amount_usdc", "agent_id"]
+                }
             },
             {
                 "name": "validate_completeness",
-                "description": "Validate task completeness deterministically"
+                "description": "Validate task completeness deterministically",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "task": {"type": "string"},
+                        "expected_items": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "actual_items": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "match_type": {
+                            "type": "string",
+                            "enum": ["exact", "contains", "pattern"],
+                            "default": "exact"
+                        }
+                    },
+                    "required": ["task", "expected_items", "actual_items"]
+                }
             }
         ]
     }
