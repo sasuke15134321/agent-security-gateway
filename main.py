@@ -189,16 +189,7 @@ async def mcp_server_card():
                     "type": "object",
                     "properties": {
                         "content": {"type": "string"},
-                        "content_type": {
-                            "type": "string",
-                            "enum": ["text", "code", "prompt", "message"],
-                            "default": "text"
-                        },
-                        "sensitivity": {
-                            "type": "string",
-                            "enum": ["low", "medium", "high", "critical"],
-                            "default": "medium"
-                        }
+                        "content_type": {"type": "string"}
                     },
                     "required": ["content"]
                 }
@@ -210,38 +201,26 @@ async def mcp_server_card():
                     "type": "object",
                     "properties": {
                         "api_url": {"type": "string"},
-                        "amount_usdc": {"type": "number"},
-                        "agent_id": {"type": "string"},
-                        "api_response_preview": {"type": "string", "default": ""}
+                        "amount_usdc": {"type": "number"}
                     },
-                    "required": ["api_url", "amount_usdc", "agent_id"]
+                    "required": ["api_url", "amount_usdc"]
                 }
             },
             {
                 "name": "validate_completeness",
-                "description": "Validate task completeness deterministically",
+                "description": "Validate task list completeness",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "task": {"type": "string"},
-                        "expected_items": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "actual_items": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "match_type": {
-                            "type": "string",
-                            "enum": ["exact", "contains", "pattern"],
-                            "default": "exact"
-                        }
+                        "expected_items": {"type": "array"},
+                        "actual_items": {"type": "array"}
                     },
-                    "required": ["task", "expected_items", "actual_items"]
+                    "required": ["expected_items", "actual_items"]
                 }
             }
-        ]
+        ],
+        "resources": [],
+        "prompts": []
     }
 
 @app.get("/.well-known/ai-agent-policy")
