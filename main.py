@@ -840,6 +840,11 @@ async def llms_txt():
     content = open("llms.txt").read()
     return PlainTextResponse(content)
 
+@app.get("/skill.md")
+async def skill_md():
+    content = open("skill.md").read()
+    return PlainTextResponse(content)
+
 @app.get("/examples.md")
 async def examples_md():
     content = open("examples.md").read()
