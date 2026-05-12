@@ -15,13 +15,13 @@ servers:
 paths:
   /api/security/scan:
     post:
-      operationId: security_scan
-      summary: Scan text for prompt injection and threats
+      operationId: scan_security
+      summary: Scan text for Japanese prompt injection and threats
       description: >
-        Scans a single text for prompt injection, hidden instructions,
-        data exfiltration attempts, jailbreak patterns, malicious URLs,
-        personal info leaks, and API key exposure.
-        Supports Japanese and English content.
+        Use before sending any Japanese text to external APIs.
+        Detects prompt injection, hidden commands,
+        data exfiltration attempts, and jailbreak patterns.
+        Especially effective for Japanese language attacks.
       tags: [Security]
       security:
         - x402Payment: []
@@ -81,12 +81,13 @@ paths:
 
   /api/security/pre-payment:
     post:
-      operationId: pre_payment_check
+      operationId: check_pre_payment
       summary: Check API safety before x402 payment
       description: >
-        Call this before every x402 payment.
-        Checks URL reputation, price validity, consecutive payment patterns,
-        and fraud signatures. Prevents payments to malicious APIs.
+        Use before every x402 payment.
+        Checks URL reputation, price anomalies,
+        duplicate payments, and fraud patterns.
+        Returns safe_to_pay true/false with risk score.
       tags: [Security]
       security:
         - x402Payment: []
@@ -148,11 +149,12 @@ paths:
   /api/validate/completeness:
     post:
       operationId: validate_completeness
-      summary: Validate task list completeness
+      summary: Verify AI task completeness deterministically
       description: >
-        Deterministic check that all expected items are present in actual items.
-        Supports exact match, substring contains, and regex pattern matching.
-        Use to verify AI agent task completion before marking done.
+        Use after AI completes a task with a list.
+        Checks if all expected items were processed.
+        Deterministic validation - no AI hallucination.
+        Returns missing items and completeness score.
       tags: [Validation]
       security:
         - x402Payment: []
