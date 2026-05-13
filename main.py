@@ -344,6 +344,20 @@ async def x402_discovery():
         ]
     }
 
+@app.get("/.well-known/x402")
+async def x402_discovery_manifest():
+    return {
+        "version": 1,
+        "resources": [
+            "POST /api/security/scan",
+            "POST /api/security/batch",
+            "POST /api/validate/deterministic",
+            "POST /api/security/pre-payment",
+            "POST /api/validate/completeness",
+            "POST /api/validate/list_check"
+        ]
+    }
+
 @app.post("/api/security/scan", response_model=SecurityScanResponse)
 async def security_scan(request: SecurityScanRequest, http_request: Request):
     """Security scan with x402 payment verification"""
