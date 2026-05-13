@@ -60,13 +60,17 @@ async def x402_payment_middleware(request: Request, call_next):
     price = _PAID_ENDPOINTS.get((request.method, request.url.path))
     if not TEST_MODE and price is not None:
         if not request.headers.get("X-PAYMENT"):
+            max_amount = str(round(float(price) * 1_000_000))
             return JSONResponse(status_code=402, content={
-                "error": "Payment Required",
-                "price": price,
-                "currency": "USDC",
-                "network": "base-mainnet",
-                "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE",
-                "endpoint": request.url.path
+                "x402Version": 1,
+                "accepts": [{
+                    "scheme": "exact",
+                    "network": "eip155:8453",
+                    "maxAmountRequired": max_amount,
+                    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                }],
+                "error": "Payment required"
             })
     return await call_next(request)
 
@@ -372,16 +376,12 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
                     "x402Version": 1,
                     "accepts": [{
                         "scheme": "exact",
-                        "network": "base",
-                        "maxAmountRequired": "50000",  # 0.05 USDC
-                        "resource": f"{http_request.url}",
-                        "description": "AI Security Scan - AIセキュリティスキャン",
-                        "mimeType": "application/json",
-                        "payTo": WALLET_ADDRESS,
-                        "maxTimeoutSeconds": 300,
+                        "network": "eip155:8453",
+                        "maxAmountRequired": "50000",
                         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                        "extra": {"name": "USDC", "version": "2"}
-                    }]
+                        "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                    }],
+                    "error": "Payment required"
                 }
             )
 
@@ -433,16 +433,12 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
                     "x402Version": 1,
                     "accepts": [{
                         "scheme": "exact",
-                        "network": "base",
-                        "maxAmountRequired": "100000",  # 0.10 USDC
-                        "resource": f"{http_request.url}",
-                        "description": "Batch Security Scan - バッチセキュリティスキャン",
-                        "mimeType": "application/json",
-                        "payTo": WALLET_ADDRESS,
-                        "maxTimeoutSeconds": 300,
+                        "network": "eip155:8453",
+                        "maxAmountRequired": "100000",
                         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                        "extra": {"name": "USDC", "version": "2"}
-                    }]
+                        "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                    }],
+                    "error": "Payment required"
                 }
             )
 
@@ -506,16 +502,12 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
                     "x402Version": 1,
                     "accepts": [{
                         "scheme": "exact",
-                        "network": "base",
-                        "maxAmountRequired": "30000",  # 0.03 USDC
-                        "resource": f"{http_request.url}",
-                        "description": "Deterministic Validation - 決定論的バリデーション",
-                        "mimeType": "application/json",
-                        "payTo": WALLET_ADDRESS,
-                        "maxTimeoutSeconds": 300,
+                        "network": "eip155:8453",
+                        "maxAmountRequired": "30000",
                         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                        "extra": {"name": "USDC", "version": "2"}
-                    }]
+                        "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                    }],
+                    "error": "Payment required"
                 }
             )
 
@@ -577,16 +569,12 @@ async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
                     "x402Version": 1,
                     "accepts": [{
                         "scheme": "exact",
-                        "network": "base",
-                        "maxAmountRequired": "30000",  # 0.03 USDC
-                        "resource": f"{http_request.url}",
-                        "description": "Pre-Payment Security Check - x402支払い前チェック",
-                        "mimeType": "application/json",
-                        "payTo": WALLET_ADDRESS,
-                        "maxTimeoutSeconds": 300,
+                        "network": "eip155:8453",
+                        "maxAmountRequired": "30000",
                         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                        "extra": {"name": "USDC", "version": "2"}
-                    }]
+                        "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                    }],
+                    "error": "Payment required"
                 }
             )
 
@@ -659,16 +647,12 @@ async def validate_completeness(request: CompletenessRequest, http_request: Requ
                     "x402Version": 1,
                     "accepts": [{
                         "scheme": "exact",
-                        "network": "base",
-                        "maxAmountRequired": "30000",  # 0.03 USDC
-                        "resource": f"{http_request.url}",
-                        "description": "Completeness Validation - 完全性チェック",
-                        "mimeType": "application/json",
-                        "payTo": WALLET_ADDRESS,
-                        "maxTimeoutSeconds": 300,
+                        "network": "eip155:8453",
+                        "maxAmountRequired": "30000",
                         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                        "extra": {"name": "USDC", "version": "2"}
-                    }]
+                        "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                    }],
+                    "error": "Payment required"
                 }
             )
 
@@ -712,16 +696,12 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
                     "x402Version": 1,
                     "accepts": [{
                         "scheme": "exact",
-                        "network": "base",
-                        "maxAmountRequired": "10000",  # 0.01 USDC
-                        "resource": f"{http_request.url}",
-                        "description": "List Count Check - 件数一致チェック",
-                        "mimeType": "application/json",
-                        "payTo": WALLET_ADDRESS,
-                        "maxTimeoutSeconds": 300,
+                        "network": "eip155:8453",
+                        "maxAmountRequired": "10000",
                         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                        "extra": {"name": "USDC", "version": "2"}
-                    }]
+                        "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+                    }],
+                    "error": "Payment required"
                 }
             )
 
