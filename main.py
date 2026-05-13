@@ -19,6 +19,7 @@ import base64
 from datetime import datetime, timedelta
 import asyncio
 import traceback
+from fastapi.openapi.utils import get_openapi
 
 from payment_verifier import PaymentVerifier
 from security_engine import SecurityEngine
@@ -46,6 +47,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema["info"]["x-guidance"] = "Call before any x402 payment or external API call. Japanese prompt injection detection. Deterministic validator."
+
+    price_map = {
+        "/api/security/scan": "0.05",
+        "/api/security/batch": "0.10",
+        "/api/validate/deterministic": "0.03",
+        "/api/security/pre-payment": "0.03",
+        "/api/validate/completeness": "0.03",
+        "/api/validate/list_check": "0.01"
+    }
+
+    for path, methods in openapi_schema.get("paths", {}).items():
+        if path in price_map:
+            for method, operation in methods.items():
+                if isinstance(operation, dict):
+                    operation["x-payment-info"] = {
+                        "protocols": ["x402"],
+                        "authMode": "x402",
+                        "price": {
+                            "mode": "fixed",
+                            "currency": "USDC",
+                            "amount": price_map[path]
+                        }
+                    }
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 _PAID_ENDPOINTS = {
     ("POST", "/api/security/scan"):          PRICE_USDC,
