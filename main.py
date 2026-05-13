@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
+import base64
 from datetime import datetime, timedelta
 import asyncio
 import traceback
@@ -62,7 +63,7 @@ async def x402_payment_middleware(request: Request, call_next):
         if not request.headers.get("X-PAYMENT"):
             max_amount = str(round(float(price) * 1_000_000))
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     return await call_next(request)
 
 # Initialize components
@@ -362,7 +363,7 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, PRICE_USDC)
         if not is_valid:
@@ -407,7 +408,7 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "100000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.10")
         if not is_valid:
@@ -464,7 +465,7 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
         if not is_valid:
@@ -519,7 +520,7 @@ async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
         if not is_valid:
@@ -585,7 +586,7 @@ async def validate_completeness(request: CompletenessRequest, http_request: Requ
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
         if not is_valid:
@@ -622,7 +623,7 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
-            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": json.dumps(_pc)})
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.01")
         if not is_valid:
