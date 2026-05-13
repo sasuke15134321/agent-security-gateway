@@ -345,13 +345,17 @@ async def x402_discovery_manifest():
     return {
         "version": 1,
         "resources": [
-            "POST /api/security/scan",
-            "POST /api/security/batch",
-            "POST /api/validate/deterministic",
-            "POST /api/security/pre-payment",
-            "POST /api/validate/completeness",
-            "POST /api/validate/list_check"
-        ]
+            "https://agent-security-gateway.onrender.com/api/security/scan",
+            "https://agent-security-gateway.onrender.com/api/security/batch",
+            "https://agent-security-gateway.onrender.com/api/validate/deterministic",
+            "https://agent-security-gateway.onrender.com/api/security/pre-payment",
+            "https://agent-security-gateway.onrender.com/api/validate/completeness",
+            "https://agent-security-gateway.onrender.com/api/validate/list_check"
+        ],
+        "ownershipProofs": [
+            "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
+        ],
+        "instructions": "Japanese prompt injection detection and x402 pre-payment security check API."
     }
 
 @app.post("/api/security/scan", response_model=SecurityScanResponse)
