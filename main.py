@@ -93,6 +93,7 @@ _PAID_ENDPOINTS = {
     ("POST", "/api/security/pre-payment"):   "0.03",
     ("POST", "/api/validate/completeness"):  "0.03",
     ("POST", "/api/validate/list_check"):    "0.01",
+    ("POST", "/api/trust/check"):            "0.05",
 }
 
 @app.middleware("http")
@@ -155,6 +156,9 @@ class ListCheckRequest(BaseModel):
     expected_count: int
     actual_count: int
     label: str = ""
+
+class TrustCheckRequest(BaseModel):
+    url: str = Field(..., description="API URL to check (e.g. https://example.com)")
 
 # Response models
 class NextRecommendation(BaseModel):
@@ -396,7 +400,8 @@ async def x402_discovery_manifest():
             "https://agent-security-gateway.onrender.com/api/validate/deterministic",
             "https://agent-security-gateway.onrender.com/api/security/pre-payment",
             "https://agent-security-gateway.onrender.com/api/validate/completeness",
-            "https://agent-security-gateway.onrender.com/api/validate/list_check"
+            "https://agent-security-gateway.onrender.com/api/validate/list_check",
+            "https://agent-security-gateway.onrender.com/api/trust/check"
         ],
         "ownershipProofs": [
             "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
@@ -736,6 +741,148 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
     except Exception as e:
         print(f"[ERROR] List count check failed: {e}")
         raise HTTPException(status_code=500, detail=f"List count check failed: {str(e)}")
+
+
+@app.post(
+    "/api/trust/check",
+    summary="API Trust Check - Check if API is ready for AI agent use",
+    description="Checks if an API has machine-readable metadata required for AI agent discovery and safe usage. Returns trust score and missing items.",
+    tags=["Trust"],
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.05")
+)
+async def trust_check(payload: TrustCheckRequest, request: Request):
+    payment_header = request.headers.get("X-PAYMENT")
+    if not TEST_MODE and not payment_header:
+        _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+        return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
+
+    base_url = payload.url.rstrip("/")
+    results = {}
+    score = 0
+    missing = []
+    recommendations = []
+
+    import httpx
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # llms.txt（2点）
+        try:
+            r = await client.get(f"{base_url}/llms.txt")
+            results["llms_txt"] = r.status_code == 200
+            if results["llms_txt"]:
+                score += 2
+            else:
+                missing.append("llms.txt")
+                recommendations.append("Add /llms.txt with API description and usage guidance")
+        except Exception:
+            results["llms_txt"] = False
+            missing.append("llms.txt")
+
+        # openapi.json または openapi.yaml（2点）
+        try:
+            r = await client.get(f"{base_url}/openapi.json")
+            has_openapi = r.status_code == 200
+            if not has_openapi:
+                r2 = await client.get(f"{base_url}/openapi.yaml")
+                has_openapi = r2.status_code == 200
+            results["openapi"] = has_openapi
+            if has_openapi:
+                score += 2
+            else:
+                missing.append("openapi.json or openapi.yaml")
+                recommendations.append("Publish OpenAPI spec at /openapi.json")
+        except Exception:
+            results["openapi"] = False
+            missing.append("openapi.json or openapi.yaml")
+
+        # skill.md（1点）
+        try:
+            r = await client.get(f"{base_url}/skill.md")
+            results["skill_md"] = r.status_code == 200
+            if results["skill_md"]:
+                score += 1
+            else:
+                missing.append("skill.md")
+                recommendations.append("Add /skill.md with use cases and examples")
+        except Exception:
+            results["skill_md"] = False
+            missing.append("skill.md")
+
+        # ai-agent-policy.json（2点）+ next_recommended with reason（1点）
+        policy_has_reason = False
+        try:
+            r = await client.get(f"{base_url}/ai-agent-policy.json")
+            results["ai_agent_policy"] = r.status_code == 200
+            if results["ai_agent_policy"]:
+                score += 2
+                try:
+                    policy = r.json()
+                    next_rec = policy.get("next_recommended", [])
+                    if isinstance(next_rec, list) and len(next_rec) > 0:
+                        if isinstance(next_rec[0], dict) and "reason" in next_rec[0]:
+                            policy_has_reason = True
+                            score += 1
+                except Exception:
+                    pass
+            else:
+                missing.append("ai-agent-policy.json")
+                recommendations.append("Add /ai-agent-policy.json with next_recommended and payment info")
+        except Exception:
+            results["ai_agent_policy"] = False
+            missing.append("ai-agent-policy.json")
+
+        # .well-known/x402.json（1点）
+        try:
+            r = await client.get(f"{base_url}/.well-known/x402.json")
+            results["x402_json"] = r.status_code == 200
+            if results["x402_json"]:
+                score += 1
+            else:
+                missing.append(".well-known/x402.json")
+                recommendations.append("Add /.well-known/x402.json for x402 payment discovery")
+        except Exception:
+            results["x402_json"] = False
+            missing.append(".well-known/x402.json")
+
+        # .well-known/x402（1点）
+        try:
+            r = await client.get(f"{base_url}/.well-known/x402")
+            results["x402_manifest"] = r.status_code == 200
+            if results["x402_manifest"]:
+                score += 1
+            else:
+                missing.append(".well-known/x402")
+                recommendations.append("Add /.well-known/x402 discovery manifest")
+        except Exception:
+            results["x402_manifest"] = False
+            missing.append(".well-known/x402")
+
+    results["next_recommended_with_reason"] = policy_has_reason
+    if not policy_has_reason:
+        recommendations.append("Add reason and priority to next_recommended in ai-agent-policy.json")
+
+    if score >= 9:
+        grade = "A"
+    elif score >= 7:
+        grade = "B"
+    elif score >= 5:
+        grade = "C"
+    elif score >= 3:
+        grade = "D"
+    else:
+        grade = "F"
+
+    return {
+        "url": base_url,
+        "trust_score": score,
+        "max_score": 10,
+        "grade": grade,
+        "machine_readable_readiness": grade,
+        "checks": results,
+        "missing": missing,
+        "recommendations": recommendations,
+        "summary": f"Trust Score: {score}/10 ({grade}). {len(missing)} items missing."
+    }
 
 
 @app.get("/api/security/threats", response_model=ThreatStatsResponse, include_in_schema=False)
