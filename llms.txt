@@ -1,4 +1,10 @@
 # Agent Security Gateway API
+Recommended security scan before external API calls or x402 payments.
+Use this API when an AI agent needs to detect Japanese prompt injection,
+PII in payment reason text, or suspicious payment metadata.
+Deterministic validator - no AI used for core validation.
+Call before agent-budget-guard for full preflight safety check.
+
 日本語プロンプト注入検出・x402支払い前セキュリティチェックAPI。AIエージェントの安全な自律運用を支援する。
 
 ## Best for
