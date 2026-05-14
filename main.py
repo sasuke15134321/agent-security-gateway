@@ -34,9 +34,13 @@ NETWORK = os.getenv("NETWORK", "base-mainnet")
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
 
 app = FastAPI(
-    title="Agent Security Gateway Lite API",
-    description="AI security scanning and threat detection service with x402 payment protocol",
-    version="1.0.0"
+    title="Agent Security Gateway",
+    version="1.0.0",
+    description=(
+        "Pay-per-request security APIs for autonomous AI agents using x402. "
+        "Detect Japanese prompt injection, validate content, scan for threats, "
+        "and perform pre-payment security checks. Built for USDC/Base payments."
+    )
 )
 
 # CORS middleware
@@ -51,38 +55,36 @@ app.add_middleware(
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
     openapi_schema = get_openapi(
         title=app.title,
         version=app.version,
         description=app.description,
         routes=app.routes,
     )
-    openapi_schema["info"]["x-guidance"] = "Call before any x402 payment or external API call. Japanese prompt injection detection. Deterministic validator."
-
-    price_map = {
-        "/api/security/scan": "0.05",
-        "/api/security/batch": "0.10",
-        "/api/validate/deterministic": "0.03",
-        "/api/security/pre-payment": "0.03",
-        "/api/validate/completeness": "0.03",
-        "/api/validate/list_check": "0.01"
-    }
-
-    for path, methods in openapi_schema.get("paths", {}).items():
-        if path in price_map:
-            for method, operation in methods.items():
-                if isinstance(operation, dict):
-                    operation["x-payment-info"] = {
-                        "protocols": ["x402"],
-                        "authMode": "x402",
-                        "price": price_map[path],
-                        "currency": "USDC"
-                    }
-
+    openapi_schema["info"]["x-guidance"] = (
+        "Agent Security Gateway provides x402-paid security tools for autonomous AI agents. "
+        "Use /api/security/scan before any external API call to detect Japanese prompt injection. "
+        "Use /api/security/pre-payment before x402 payments to check payment metadata safety. "
+        "Use /api/validate/deterministic for rule-based content validation without AI. "
+        "Useful for AI agent security, prompt injection detection, USDC/Base payments."
+    )
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+def paid_operation(amount_usd: str) -> dict:
+    return {
+        "x-payment-info": {
+            "price": {
+                "mode": "fixed",
+                "currency": "USD",
+                "amount": amount_usd,
+            },
+            "protocols": [{"x402": {}}],
+        }
+    }
 
 _PAID_ENDPOINTS = {
     ("POST", "/api/security/scan"):          PRICE_USDC,
@@ -99,7 +101,7 @@ async def x402_payment_middleware(request: Request, call_next):
     if not TEST_MODE and price is not None:
         if not request.headers.get("X-PAYMENT"):
             max_amount = str(round(float(price) * 1_000_000))
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     return await call_next(request)
 
@@ -194,7 +196,7 @@ class DeterministicValidateResponse(BaseModel):
     next_recommended: NextRecommendation
 
 # x402 payment protocol endpoint discovery
-@app.get("/ai-agent-policy")
+@app.get("/ai-agent-policy", include_in_schema=False)
 async def get_agent_policy():
     """Get AI agent policy information"""
     try:
@@ -206,7 +208,7 @@ async def get_agent_policy():
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid policy file format")
 
-@app.get("/.well-known/mcp/server-card.json")
+@app.get("/.well-known/mcp/server-card.json", include_in_schema=False)
 async def mcp_server_card():
     """Smithery MCP server card - allows Smithery to discover tools without MCP protocol scan"""
     return {
@@ -256,7 +258,7 @@ async def mcp_server_card():
         "prompts": []
     }
 
-@app.get("/.well-known/ai-agent-policy")
+@app.get("/.well-known/ai-agent-policy", include_in_schema=False)
 async def ai_agent_policy():
     import json
     import os
@@ -266,7 +268,7 @@ async def ai_agent_policy():
             return json.load(f)
     return {"error": "Policy not found"}
 
-@app.get("/.well-known/x402.json")
+@app.get("/.well-known/x402.json", include_in_schema=False)
 async def x402_discovery():
     """x402 protocol endpoint discovery for Agentic.Market"""
     return {
@@ -377,10 +379,17 @@ async def x402_discovery():
         ]
     }
 
-@app.get("/.well-known/x402")
+@app.get("/.well-known/x402", include_in_schema=False)
 async def x402_discovery_manifest():
     return {
         "version": 1,
+        "name": "Agent Security Gateway",
+        "title": "Agent Security Gateway",
+        "description": (
+            "Pay-per-request security APIs for autonomous AI agents using x402. "
+            "Detect Japanese prompt injection, validate content, and perform pre-payment checks."
+        ),
+        "tags": ["AI", "Security", "Governance"],
         "resources": [
             "https://agent-security-gateway.onrender.com/api/security/scan",
             "https://agent-security-gateway.onrender.com/api/security/batch",
@@ -392,10 +401,20 @@ async def x402_discovery_manifest():
         "ownershipProofs": [
             "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
         ],
-        "instructions": "Japanese prompt injection detection and x402 pre-payment security check API."
+        "instructions": (
+            "Agent Security Gateway detects Japanese prompt injection and validates content. "
+            "Use /api/security/scan before external API calls. "
+            "Use /api/security/pre-payment before x402 payments."
+        )
     }
 
-@app.post("/api/security/scan", response_model=SecurityScanResponse)
+@app.post("/api/security/scan",
+    summary="Security Scan - Detect prompt injection and threats",
+    description="Scans text for Japanese prompt injection, PII, suspicious patterns, and x402 payment threats. Use before any external API call or x402 payment.",
+    tags=["Security"],
+    response_model=SecurityScanResponse,
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.05"))
 async def security_scan(request: SecurityScanRequest, http_request: Request):
     """Security scan with x402 payment verification"""
 
@@ -403,7 +422,7 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
     if not TEST_MODE:
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, PRICE_USDC)
@@ -440,7 +459,13 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
         print(f"[ERROR] Security scan failed: {e}")
         raise HTTPException(status_code=500, detail=f"Security scan failed: {str(e)}")
 
-@app.post("/api/security/batch", response_model=BatchScanResponse)
+@app.post("/api/security/batch",
+    summary="Batch Security Scan - Scan multiple texts",
+    description="Batch scan multiple texts for security threats. Returns threat scores and injection detection results for each input.",
+    tags=["Security"],
+    response_model=BatchScanResponse,
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.10"))
 async def batch_security_scan(request: BatchScanRequest, http_request: Request):
     """Batch security scan with x402 payment verification"""
 
@@ -448,7 +473,7 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
     if not TEST_MODE:
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "100000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "100000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.10")
@@ -497,7 +522,13 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
         print(f"[ERROR] Batch security scan failed: {e}")
         raise HTTPException(status_code=500, detail=f"Batch security scan failed: {str(e)}")
 
-@app.post("/api/validate/deterministic", response_model=DeterministicValidateResponse)
+@app.post("/api/validate/deterministic",
+    summary="Deterministic Validator - Rule-based content validation",
+    description="Validates content using deterministic rules. No AI used. Checks for API keys, PII, URL validity, JSON format, and budget limits.",
+    tags=["Security"],
+    response_model=DeterministicValidateResponse,
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.03"))
 async def deterministic_validate(request: DeterministicValidateRequest, http_request: Request):
     """決定論的バリデーション - AIを使わないルールベース検証 (0.03 USDC)"""
 
@@ -505,7 +536,7 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
     if not TEST_MODE:
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
@@ -553,14 +584,19 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
         print(f"[ERROR] Deterministic validation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Deterministic validation failed: {str(e)}")
 
-@app.post("/api/security/pre-payment")
+@app.post("/api/security/pre-payment",
+    summary="Pre-Payment Check - Security check before x402 payment",
+    description="Performs security check before x402 USDC or JPYC payment. Detects suspicious payment metadata and PII in payment reason text.",
+    tags=["Security"],
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.03"))
 async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
     """x402支払い前セキュリティチェック (0.03 USDC)"""
 
     if not TEST_MODE:
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
@@ -619,14 +655,19 @@ async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=f"Pre-payment check failed: {str(e)}")
 
 
-@app.post("/api/validate/completeness")
+@app.post("/api/validate/completeness",
+    summary="Completeness Validator - Check response completeness",
+    description="Validates that AI responses are complete and not truncated. Detects missing fields, incomplete reasoning, and response quality issues.",
+    tags=["Security"],
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.03"))
 async def validate_completeness(request: CompletenessRequest, http_request: Request):
     """完全性チェック - タスク完了アイテムの網羅性検証 (0.03 USDC)"""
 
     if not TEST_MODE:
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.03")
@@ -656,14 +697,19 @@ async def validate_completeness(request: CompletenessRequest, http_request: Requ
         raise HTTPException(status_code=500, detail=f"Completeness validation failed: {str(e)}")
 
 
-@app.post("/api/validate/list_check")
+@app.post("/api/validate/list_check",
+    summary="List Check - Validate list item counts",
+    description="Checks that list items in AI responses match expected counts. Detects missing or extra items in structured responses.",
+    tags=["Security"],
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.01"))
 async def validate_list_check(request: ListCheckRequest, http_request: Request):
     """件数一致チェック - 期待件数と実際件数の一致検証 (0.01 USDC)"""
 
     if not TEST_MODE:
         payment_header = http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:8453", "maxAmountRequired": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.01")
@@ -692,7 +738,7 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=f"List count check failed: {str(e)}")
 
 
-@app.get("/api/security/threats", response_model=ThreatStatsResponse)
+@app.get("/api/security/threats", response_model=ThreatStatsResponse, include_in_schema=False)
 async def get_threat_stats():
     """Get threat detection statistics (free endpoint)"""
     try:
@@ -702,7 +748,7 @@ async def get_threat_stats():
         print(f"[ERROR] Failed to get threat stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get threat statistics: {str(e)}")
 
-@app.get("/health")
+@app.get("/health", include_in_schema=False)
 async def health_check():
     """Health check endpoint"""
     # Test database connectivity
@@ -739,7 +785,7 @@ async def health_check():
         }
     }
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint with service information"""
     return {
@@ -790,17 +836,17 @@ async def root():
         ]
     }
 
-@app.get("/llms.txt")
+@app.get("/llms.txt", include_in_schema=False)
 async def llms_txt():
     content = open("llms.txt").read()
     return PlainTextResponse(content)
 
-@app.get("/skill.md")
+@app.get("/skill.md", include_in_schema=False)
 async def skill_md():
     content = open("skill.md").read()
     return PlainTextResponse(content)
 
-@app.get("/examples.md")
+@app.get("/examples.md", include_in_schema=False)
 async def examples_md():
     content = open("examples.md").read()
     return PlainTextResponse(content)
