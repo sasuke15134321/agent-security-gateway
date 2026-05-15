@@ -753,8 +753,8 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
 
 @app.post(
     "/api/trust/check",
-    summary="API Trust Check - Check if API is ready for AI agent use",
-    description="Checks if an API has machine-readable metadata required for AI agent discovery and safe usage. Returns trust score and missing items.",
+    summary="API Trust Check - L6 Trust Scanner for AI agent usability",
+    description="Checks if an API has machine-readable metadata and x402 payment compliance for AI agent use. Scores content quality, not just existence. Returns trust score, compliance flags, and actionable recommendations.",
     tags=["Trust"],
     responses={402: {"description": "Payment Required"}},
     openapi_extra=paid_operation("0.05")
@@ -766,19 +766,28 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
         return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
     base_url = payload.url.rstrip("/")
-    results = {}
+    results: Dict[str, Any] = {}
     score = 0
     missing = []
     recommendations = []
 
+    x402_checks: Dict[str, Any] = {}
+    policy_checks: Dict[str, Any] = {}
+    openapi_payment_checks: Dict[str, Any] = {}
+
+    x402_compliant = False
+    openapi_payment_ready = False
+    policy_ready = False
+
     import httpx
     async with httpx.AsyncClient(timeout=10.0) as client:
-        # llms.txt（2点）
+
+        # 1. llms.txt 存在 (1点)
         try:
             r = await client.get(f"{base_url}/llms.txt")
             results["llms_txt"] = r.status_code == 200
             if results["llms_txt"]:
-                score += 2
+                score += 1
             else:
                 missing.append("llms.txt")
                 recommendations.append("Add /llms.txt with API description and usage guidance")
@@ -786,16 +795,21 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
             results["llms_txt"] = False
             missing.append("llms.txt")
 
-        # openapi.json または openapi.yaml（2点）
+        # 2. OpenAPI 存在 (1点)
+        openapi_content = ""
         try:
             r = await client.get(f"{base_url}/openapi.json")
             has_openapi = r.status_code == 200
+            if has_openapi:
+                openapi_content = r.text
             if not has_openapi:
                 r2 = await client.get(f"{base_url}/openapi.yaml")
                 has_openapi = r2.status_code == 200
+                if has_openapi:
+                    openapi_content = r2.text
             results["openapi"] = has_openapi
             if has_openapi:
-                score += 2
+                score += 1
             else:
                 missing.append("openapi.json or openapi.yaml")
                 recommendations.append("Publish OpenAPI spec at /openapi.json")
@@ -803,7 +817,7 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
             results["openapi"] = False
             missing.append("openapi.json or openapi.yaml")
 
-        # skill.md（1点）
+        # 3. skill.md 存在 (1点)
         try:
             r = await client.get(f"{base_url}/skill.md")
             results["skill_md"] = r.status_code == 200
@@ -816,20 +830,15 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
             results["skill_md"] = False
             missing.append("skill.md")
 
-        # ai-agent-policy.json（2点）+ next_recommended with reason（1点）
-        policy_has_reason = False
+        # 4. ai-agent-policy.json 存在 (1点)
+        policy_data = None
         try:
             r = await client.get(f"{base_url}/ai-agent-policy.json")
             results["ai_agent_policy"] = r.status_code == 200
             if results["ai_agent_policy"]:
-                score += 2
+                score += 1
                 try:
-                    policy = r.json()
-                    next_rec = policy.get("next_recommended", [])
-                    if isinstance(next_rec, list) and len(next_rec) > 0:
-                        if isinstance(next_rec[0], dict) and "reason" in next_rec[0]:
-                            policy_has_reason = True
-                            score += 1
+                    policy_data = r.json()
                 except Exception:
                     pass
             else:
@@ -839,25 +848,56 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
             results["ai_agent_policy"] = False
             missing.append("ai-agent-policy.json")
 
-        # .well-known/x402.json（1点）
-        try:
-            r = await client.get(f"{base_url}/.well-known/x402.json")
-            results["x402_json"] = r.status_code == 200
-            if results["x402_json"]:
-                score += 1
-            else:
-                missing.append(".well-known/x402.json")
-                recommendations.append("Add /.well-known/x402.json for x402 payment discovery")
-        except Exception:
-            results["x402_json"] = False
-            missing.append(".well-known/x402.json")
+        # 5. ai-agent-policy.json 中身が十分か (1点) / 9. reason+priority (1点)
+        policy_has_reason = False
+        if policy_data:
+            next_rec = policy_data.get("next_recommended", [])
+            orch = policy_data.get("orchestration_flow")
+            policy_checks["next_recommended_is_array"] = isinstance(next_rec, list)
+            policy_checks["has_orchestration_flow"] = isinstance(orch, list)
 
-        # .well-known/x402（1点）
+            if isinstance(next_rec, list) and len(next_rec) > 0:
+                first = next_rec[0] if isinstance(next_rec[0], dict) else {}
+                has_api      = bool(first.get("api"))
+                has_url      = bool(first.get("url"))
+                has_reason   = bool(str(first.get("reason", "")).strip())
+                has_priority = bool(str(first.get("priority", "")).strip())
+                policy_checks["has_api"]      = has_api
+                policy_checks["has_url"]      = has_url
+                policy_checks["has_reason"]   = has_reason
+                policy_checks["has_priority"] = has_priority
+
+                if has_api and has_url:
+                    score += 1  # 中身が十分 (5点目)
+                else:
+                    recommendations.append("Add orchestration_flow for multi-step AI agent usage")
+
+                if has_reason and has_priority:
+                    policy_has_reason = True  # 9点目は後で加算
+            else:
+                policy_checks.update({"has_api": False, "has_url": False,
+                                      "has_reason": False, "has_priority": False})
+                recommendations.append("Add orchestration_flow for multi-step AI agent usage")
+        elif results.get("ai_agent_policy"):
+            policy_checks["parse_error"] = True
+
+        results["next_recommended_with_reason"] = policy_has_reason
+        if not policy_has_reason and results.get("ai_agent_policy"):
+            recommendations.append("Add reason and priority to next_recommended in ai-agent-policy.json")
+
+        policy_ready = results.get("ai_agent_policy", False) and policy_has_reason
+
+        # 6. /.well-known/x402 manifest 存在 (1点)
+        x402_manifest_data = None
         try:
             r = await client.get(f"{base_url}/.well-known/x402")
             results["x402_manifest"] = r.status_code == 200
             if results["x402_manifest"]:
                 score += 1
+                try:
+                    x402_manifest_data = r.json()
+                except Exception:
+                    pass
             else:
                 missing.append(".well-known/x402")
                 recommendations.append("Add /.well-known/x402 discovery manifest")
@@ -865,9 +905,129 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
             results["x402_manifest"] = False
             missing.append(".well-known/x402")
 
-    results["next_recommended_with_reason"] = policy_has_reason
-    if not policy_has_reason:
-        recommendations.append("Add reason and priority to next_recommended in ai-agent-policy.json")
+        # /.well-known/x402.json (存在確認 + content quality 補助)
+        x402_json_data = None
+        try:
+            r = await client.get(f"{base_url}/.well-known/x402.json")
+            results["x402_json"] = r.status_code == 200
+            if not results["x402_json"]:
+                missing.append(".well-known/x402.json")
+                recommendations.append("Add /.well-known/x402.json for x402 payment discovery")
+            else:
+                try:
+                    x402_json_data = r.json()
+                except Exception:
+                    pass
+        except Exception:
+            results["x402_json"] = False
+            missing.append(".well-known/x402.json")
+
+        # 7. x402 manifest content quality (0-2点)
+        # x402.json (accepts v2形式優先) → x402.json endpoints形式 → x402 manifest
+        x402_content_score = 0
+        check_data = x402_json_data or x402_manifest_data
+
+        if check_data:
+            m = check_data
+            accepts_list  = m.get("accepts")
+            endpoints_list = m.get("endpoints")
+
+            if isinstance(accepts_list, list) and len(accepts_list) > 0:
+                # v2 accepts 形式
+                a = accepts_list[0] if isinstance(accepts_list[0], dict) else {}
+                has_version  = "version" in m or "x402Version" in m
+                has_network  = bool(a.get("network"))
+                has_asset    = bool(a.get("asset"))
+                pay_to       = a.get("payTo", "")
+                has_pay_to   = bool(pay_to)
+                pay_to_valid = str(pay_to).startswith("0x") if pay_to else False
+                amt          = a.get("amount") if a.get("amount") is not None else a.get("maxAmountRequired")
+                has_amount   = amt is not None and str(amt).strip() != ""
+                has_resource = bool(a.get("resource") or a.get("endpoint") or a.get("path"))
+
+                x402_checks.update({
+                    "format": "v2_accepts",
+                    "has_version": has_version,
+                    "v2_compliant": bool(has_asset or a.get("scheme")),
+                    "has_accepts": True,
+                    "has_network": has_network,
+                    "has_asset": has_asset,
+                    "has_pay_to": has_pay_to,
+                    "pay_to_valid": pay_to_valid,
+                    "has_amount": has_amount,
+                    "has_resource": has_resource,
+                })
+
+                if has_network and has_asset and has_pay_to and has_amount and pay_to_valid:
+                    x402_content_score = 2
+                    x402_compliant = True
+                elif has_network and has_amount:
+                    x402_content_score = 1
+
+                if not has_pay_to or not pay_to_valid:
+                    recommendations.append("Add payTo address to x402 accepts[]")
+                if not has_asset:
+                    recommendations.append("Add asset (contract address) to x402 accepts[]")
+                if not has_amount:
+                    recommendations.append("Add amount or maxAmountRequired to x402 accepts[]")
+
+            elif isinstance(endpoints_list, list) and len(endpoints_list) > 0:
+                # endpoints 形式 (旧仕様 - 最大1点)
+                ep = endpoints_list[0] if isinstance(endpoints_list[0], dict) else {}
+                has_network = bool(ep.get("network"))
+                has_amount  = bool(ep.get("price") or ep.get("amount"))
+                x402_checks.update({
+                    "format": "endpoints",
+                    "has_version": "version" in m,
+                    "v2_compliant": False,
+                    "has_accepts": False,
+                    "has_network": has_network,
+                    "has_asset": False,
+                    "has_pay_to": False,
+                    "pay_to_valid": False,
+                    "has_amount": has_amount,
+                    "has_resource": bool(ep.get("path") or ep.get("method")),
+                })
+                if has_network and has_amount:
+                    x402_content_score = 1
+                recommendations.append("Add valid x402 manifest with accepts[] array")
+                recommendations.append("Add payTo address to x402 accepts[]")
+                recommendations.append("Add asset (contract address) to x402 accepts[]")
+            else:
+                x402_checks.update({"format": "unknown", "has_accepts": False,
+                                    "has_network": False, "has_amount": False})
+                recommendations.append("Add valid x402 manifest with accepts[] array")
+                recommendations.append("Add amount or maxAmountRequired to x402 accepts[]")
+                recommendations.append("Add payTo address to x402 accepts[]")
+        else:
+            x402_checks.update({"format": "not_found", "has_accepts": False})
+            recommendations.append("Add valid x402 manifest with accepts[] array")
+
+        score += x402_content_score
+        results["x402_content_quality"] = x402_content_score
+
+        # 8. OpenAPI payment 情報 (1点)
+        if openapi_content:
+            payment_keywords = ["x-payment-info", "x402", "402", "Payment Required",
+                                "paid_operation", "X-PAYMENT"]
+            found_kw = [kw for kw in payment_keywords if kw in openapi_content]
+            openapi_payment_ready = len(found_kw) > 0
+            openapi_payment_checks["found_keywords"] = found_kw
+            openapi_payment_checks["payment_ready"] = openapi_payment_ready
+        else:
+            openapi_payment_checks.update({"found_keywords": [], "payment_ready": False})
+
+        results["openapi_payment_ready"] = openapi_payment_ready
+        if openapi_payment_ready:
+            score += 1
+        else:
+            recommendations.append("Add x-payment-info or 402 payment information to OpenAPI")
+
+    # 9. next_recommended reason+priority (1点)
+    if policy_has_reason:
+        score += 1
+
+    payment_ready = x402_compliant and openapi_payment_ready
 
     if score >= 9:
         grade = "A"
@@ -889,7 +1049,14 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
         "checks": results,
         "missing": missing,
         "recommendations": recommendations,
-        "summary": f"Trust Score: {score}/10 ({grade}). {len(missing)} items missing."
+        "summary": f"Trust Score: {score}/10 ({grade}). {len(missing)} items missing.",
+        "x402_compliant": x402_compliant,
+        "payment_ready": payment_ready,
+        "policy_ready": policy_ready,
+        "openapi_payment_ready": openapi_payment_ready,
+        "x402_checks": x402_checks,
+        "policy_checks": policy_checks,
+        "openapi_payment_checks": openapi_payment_checks,
     }
 
 
