@@ -929,8 +929,9 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
 
         if check_data:
             m = check_data
-            accepts_list  = m.get("accepts")
+            accepts_list   = m.get("accepts")
             endpoints_list = m.get("endpoints")
+            resources_list = m.get("resources")
 
             if isinstance(accepts_list, list) and len(accepts_list) > 0:
                 # v2 accepts 形式
@@ -989,6 +990,28 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
                     "has_resource": bool(ep.get("path") or ep.get("method")),
                 })
                 if has_network and has_amount:
+                    x402_content_score = 1
+                recommendations.append("Add valid x402 manifest with accepts[] array")
+                recommendations.append("Add payTo address to x402 accepts[]")
+                recommendations.append("Add asset (contract address) to x402 accepts[]")
+            elif isinstance(resources_list, list) and len(resources_list) > 0:
+                # resources 形式 (url+method オブジェクト配列 - 最大1点)
+                ep = resources_list[0] if isinstance(resources_list[0], dict) else {}
+                has_url    = bool(ep.get("url")) if isinstance(ep, dict) else isinstance(ep, str)
+                has_method = bool(ep.get("method")) if isinstance(ep, dict) else False
+                x402_checks.update({
+                    "format": "resources",
+                    "has_version": "version" in m,
+                    "v2_compliant": False,
+                    "has_accepts": False,
+                    "has_network": False,
+                    "has_asset": False,
+                    "has_pay_to": False,
+                    "pay_to_valid": False,
+                    "has_amount": False,
+                    "has_resource": has_url,
+                })
+                if has_url and has_method:
                     x402_content_score = 1
                 recommendations.append("Add valid x402 manifest with accepts[] array")
                 recommendations.append("Add payTo address to x402 accepts[]")
