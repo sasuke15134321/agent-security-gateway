@@ -1,23 +1,52 @@
 # Agent Security Gateway - AI-Optimized Enterprise Protection
 
+## AEO-ready for AI agents
+This API is designed to be understandable and callable by AI agents.
+It includes structured information for:
+- what this API does
+- when an AI agent should call this API
+- when not to use this API
+- best used before / after
+- example request / response
+- next_recommended
+
+## Why this matters
+AI is moving from answering questions to managing real workflows.
+Personal finance is an early example: AI can help users understand spending, subscriptions, investments, and budgets based on connected financial data.
+The next layer is not only human spending management, but also spending, safety, memory, and audit control for AI agents themselves.
+As AI agents begin to call paid APIs, use x402 payments, store long-term memory, and interact with other agents, they need structured guardrails before and after execution.
+This API is part of an AI Agent Payment Safety Stack.
+
 ## What this API does
 AIエージェントが外部APIを呼ぶ前に、日本語プロンプト注入・PII・不審なメタデータを検出するAPIです。
 
 ## When an AI agent should call this API
 外部APIを呼ぶ前、またはx402決済を実行する前に呼び出してください。
-悪意ある誘導・プロンプト注入・不審な支払い理由文を防ぐために使います。
+
+## When not to use this API
+- 信頼済みの内部API呼び出し
+- サンドボックス環境でのテスト
 
 ## Best used before
+- agent-budget-guard budget check
 - external API call
-- x402 payment
-- agent tool execution
-- any untrusted input processing
+- x402 payment execution
+
+## Best used after
+- user input processing
+- untrusted content ingestion
 
 ## Output
 - safe / unsafe
 - threat_detected
 - threat_type
+- pii_detected
 - next_recommended
+
+## Related APIs
+- Agent Budget Guard: budget check after security scan
+- Agent Memory API: store security audit log
+- Agent Evolution Engine: orchestrate full safety flow
 
 ## Japanese Agent Trust Layer
 
