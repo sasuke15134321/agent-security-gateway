@@ -12,16 +12,19 @@ It includes structured information for:
 
 ## Why this matters
 AI is moving from answering questions to managing real workflows.
-Personal finance is an early example: AI can help users understand spending, subscriptions, investments, and budgets based on connected financial data.
-The next layer is not only human spending management, but also spending, safety, memory, and audit control for AI agents themselves.
 As AI agents begin to call paid APIs, use x402 payments, store long-term memory, and interact with other agents, they need structured guardrails before and after execution.
-This API is part of an AI Agent Payment Safety Stack.
+This API is part of an AI Agent Payment Safety Stack designed to run as a pre/post-execution control layer on Arc and other agent economies.
+
+## Arc compatibility
+Designed to run as a pre-execution control layer before ERC-8183 job funding on Arc testnet.
+Call this API before an AI agent funds or executes a job contract on Arc.
+Compatible with AI agents using USDC, JPYC, x402, or Arc-style payment flows.
 
 ## What this API does
 AIエージェントが外部APIを呼ぶ前に、日本語プロンプト注入・PII・不審なメタデータを検出するAPIです。
 
 ## When an AI agent should call this API
-外部APIを呼ぶ前、またはx402決済を実行する前に呼び出してください。
+外部APIを呼ぶ前、x402決済前、またはArc上のERC-8183 job実行前に呼び出してください。
 
 ## When not to use this API
 - 信頼済みの内部API呼び出し
@@ -30,7 +33,8 @@ AIエージェントが外部APIを呼ぶ前に、日本語プロンプト注入
 ## Best used before
 - agent-budget-guard budget check
 - external API call
-- x402 payment execution
+- x402 payment
+- ERC-8183 job execution on Arc
 
 ## Best used after
 - user input processing
@@ -44,9 +48,9 @@ AIエージェントが外部APIを呼ぶ前に、日本語プロンプト注入
 - next_recommended
 
 ## Related APIs
-- Agent Budget Guard: budget check after security scan
-- Agent Memory API: store security audit log
-- Agent Evolution Engine: orchestrate full safety flow
+- Agent Budget Guard
+- Agent Memory API
+- Agent Evolution Engine
 
 ## Japanese Agent Trust Layer
 
