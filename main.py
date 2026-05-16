@@ -925,7 +925,14 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
         # 7. x402 manifest content quality (0-2点)
         # x402.json (accepts v2形式優先) → x402.json endpoints形式 → x402 manifest
         x402_content_score = 0
-        check_data = x402_json_data or x402_manifest_data
+        # accepts/endpoints/resources を持つ方を優先して使う
+        _known_keys = ("accepts", "endpoints", "resources")
+        if x402_json_data and any(k in x402_json_data for k in _known_keys):
+            check_data = x402_json_data
+        elif x402_manifest_data and any(k in x402_manifest_data for k in _known_keys):
+            check_data = x402_manifest_data
+        else:
+            check_data = x402_json_data or x402_manifest_data
 
         if check_data:
             m = check_data
