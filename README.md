@@ -1,5 +1,24 @@
 # Agent Security Gateway - AI-Optimized Enterprise Protection
 
+## What this API does
+AIエージェントが外部APIを呼ぶ前に、日本語プロンプト注入・PII・不審なメタデータを検出するAPIです。
+
+## When an AI agent should call this API
+外部APIを呼ぶ前、またはx402決済を実行する前に呼び出してください。
+悪意ある誘導・プロンプト注入・不審な支払い理由文を防ぐために使います。
+
+## Best used before
+- external API call
+- x402 payment
+- agent tool execution
+- any untrusted input processing
+
+## Output
+- safe / unsafe
+- threat_detected
+- threat_type
+- next_recommended
+
 ## Japanese Agent Trust Layer
 
 このAPIは「Japanese Agent Trust Layer」の一部です。
