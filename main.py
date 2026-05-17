@@ -139,7 +139,7 @@ async def x402_payment_middleware(request: Request, call_next):
     path = request.url.path
     price = _PAID_ENDPOINTS.get((request.method, path))
     if not TEST_MODE and price is not None:
-        if not request.headers.get("X-PAYMENT"):
+        if not (request.headers.get("PAYMENT-SIGNATURE") or request.headers.get("X-PAYMENT")):
             max_amount = str(round(float(price) * 1_000_000))
             _pc = {
                 "x402Version": 2,
@@ -489,7 +489,7 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
 
     # Skip payment verification in test mode
     if not TEST_MODE:
-        payment_header = http_request.headers.get("X-PAYMENT")
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
@@ -540,7 +540,7 @@ async def batch_security_scan(request: BatchScanRequest, http_request: Request):
 
     # Skip payment verification in test mode
     if not TEST_MODE:
-        payment_header = http_request.headers.get("X-PAYMENT")
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "100000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
@@ -603,7 +603,7 @@ async def deterministic_validate(request: DeterministicValidateRequest, http_req
 
     # Skip payment verification in test mode
     if not TEST_MODE:
-        payment_header = http_request.headers.get("X-PAYMENT")
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
@@ -663,7 +663,7 @@ async def pre_payment_check(request: PrePaymentRequest, http_request: Request):
     """x402支払い前セキュリティチェック (0.03 USDC)"""
 
     if not TEST_MODE:
-        payment_header = http_request.headers.get("X-PAYMENT")
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
@@ -734,7 +734,7 @@ async def validate_completeness(request: CompletenessRequest, http_request: Requ
     """完全性チェック - タスク完了アイテムの網羅性検証 (0.03 USDC)"""
 
     if not TEST_MODE:
-        payment_header = http_request.headers.get("X-PAYMENT")
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "30000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
@@ -776,7 +776,7 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
     """件数一致チェック - 期待件数と実際件数の一致検証 (0.01 USDC)"""
 
     if not TEST_MODE:
-        payment_header = http_request.headers.get("X-PAYMENT")
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
@@ -816,7 +816,7 @@ async def validate_list_check(request: ListCheckRequest, http_request: Request):
     openapi_extra=paid_operation("0.05")
 )
 async def trust_check(payload: TrustCheckRequest, request: Request):
-    payment_header = request.headers.get("X-PAYMENT")
+    payment_header = request.headers.get("PAYMENT-SIGNATURE") or request.headers.get("X-PAYMENT")
     if not TEST_MODE and not payment_header:
         _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
         return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
