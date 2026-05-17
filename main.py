@@ -96,13 +96,63 @@ _PAID_ENDPOINTS = {
     ("POST", "/api/trust/check"):            "0.05",
 }
 
+# CDP Bazaar indexing extension for /api/security/scan
+_BAZAAR_EXTENSIONS = {
+    "bazaar": {
+        "info": {
+            "input": {
+                "type": "http",
+                "method": "POST",
+                "bodyType": "json",
+                "body": {
+                    "prompt": "Please summarize this document",
+                    "context": "user_input",
+                    "check_type": "prompt_injection"
+                }
+            },
+            "output": {
+                "type": "json",
+                "example": {
+                    "safe": True,
+                    "threat_detected": False,
+                    "threat_type": None,
+                    "risk_level": "low",
+                    "next_recommended": "proceed_with_x402_payment"
+                }
+            }
+        },
+        "schema": {
+            "type": "object",
+            "properties": {
+                "safe": {"type": "boolean"},
+                "threat_detected": {"type": "boolean"},
+                "threat_type": {"type": "string"},
+                "risk_level": {"type": "string"},
+                "next_recommended": {"type": "string"}
+            }
+        }
+    }
+}
+
 @app.middleware("http")
 async def x402_payment_middleware(request: Request, call_next):
-    price = _PAID_ENDPOINTS.get((request.method, request.url.path))
+    path = request.url.path
+    price = _PAID_ENDPOINTS.get((request.method, path))
     if not TEST_MODE and price is not None:
         if not request.headers.get("X-PAYMENT"):
             max_amount = str(round(float(price) * 1_000_000))
-            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            _pc = {
+                "x402Version": 2,
+                "error": "Payment required",
+                "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}],
+            }
+            if path == "/api/security/scan":
+                _pc["extensions"] = _BAZAAR_EXTENSIONS
+                _pc["safe"] = False
+                _pc["threat_detected"] = False
+                _pc["threat_type"] = None
+                _pc["risk_level"] = "unknown"
+                _pc["next_recommended"] = "complete_x402_payment"
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     return await call_next(request)
 
