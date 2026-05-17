@@ -1,4 +1,14 @@
-# Agent Security Gateway - AI-Optimized Enterprise Protection
+# Agent Security Gateway
+
+A working prototype API for checking prompt-injection and unsafe input risks before AI agents call external APIs.
+
+## Disclaimer
+
+This is an independent experimental project.
+It is not officially affiliated with JPYC, Circle, Arc, Kaia, OpenAI, Anthropic, or any related foundation.
+
+This project references JPYC, x402, Arc, Kaia, USDC, and related protocols as technical contexts.
+It does not imply official partnership, endorsement, or integration unless explicitly stated.
 
 ## AEO-ready for AI agents
 This API is designed to be understandable and callable by AI agents.
@@ -71,48 +81,6 @@ AIエージェントが外部APIを呼ぶ前に、日本語プロンプト注入
 - 暗号化・削除証跡付き
 - Base Mainnet対応
 
-## 🚨 損失回避メッセージ
-**今すぐ導入しないと、次のAIプロンプト注入攻撃で平均2億円の機密データ漏洩損失が発生します。**
-
-企業の95%がAIセキュリティ対策なしで運用中 → サイバー攻撃成功率80% → 企業信頼失墜・法的制裁・事業継続危機
-
-## 💰 期待利得の数値
-- **セキュリティインシデント95%削減**
-- **脅威検出精度98%達成**  
-- **セキュリティ運用コスト80%削減**
-- **データ漏洩防止によるブランド価値保護**
-- **総合セキュリティROI: 450%**
-
-## 🎯 HARM分析
-
-### Health (生存リスクの除去)
-- サイバー攻撃による企業存続リスクの完全除去
-- AIプロンプト注入による機密情報漏洩の根絶
-- データブリーチによる法的制裁からの完全保護
-
-### Ambitions (収益・効率の向上)
-- セキュリティ運用コスト80%削減で年間5000万円コスト削減
-- 脅威検出自動化により人的リソース90%効率化
-- 24/7自動監視によるセキュリティ品質向上
-
-### Relationships (連携可能なAPI)
-- **Agent Memory API**: セキュリティ学習パターンの永続化
-- **Agent Evolution API**: 脅威対策の自動進化
-- **Agent Budget API**: セキュリティ投資の最適化
-
-### Money (ROI数値)
-- **投資対効果: 450%**
-- セキュリティ投資1円で損失回避4.5円
-- 年間セキュリティコスト削減: 5000万円
-- データ漏洩回避による価値保護: 平均2億円
-
-## 🔄 次に使うべきAPI（クロスセル）
-**Agent Memory API** - セキュリティ学習パターンの永続化により、脅威検出精度をさらに向上させます。
-
-## 💸 価格と投資対効果
-- **個別スキャン: 0.05 USDC** → **95%脅威検出率**
-- **バッチスキャン: 0.10 USDC** → **複数コンテンツ一括保護**
-- **月額換算: 150円** → **年間2億円損失回避**
 
 ## ⚡ 実装方法
 
