@@ -147,6 +147,12 @@ async def x402_payment_middleware(request: Request, call_next):
                 "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}],
             }
             if path == "/api/security/scan":
+                _pc["resource"] = {
+                    "url": "https://agent-security-gateway.onrender.com/api/security/scan",
+                    "method": "POST",
+                    "description": "Security scan for AI agent requests before external API calls or x402 payments",
+                    "mimeType": "application/json"
+                }
                 _pc["extensions"] = _BAZAAR_EXTENSIONS
                 _pc["safe"] = False
                 _pc["threat_detected"] = False
