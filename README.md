@@ -2,6 +2,24 @@
 
 A working prototype API for checking prompt-injection and unsafe input risks before AI agents call external APIs.
 
+## Part of AI Agent Infrastructure Safety Stack
+
+This project is part of a small AI-agent infrastructure safety stack.
+
+It focuses on one layer of the emerging problem:
+how to control autonomous agents before they call APIs, spend money, write memory, or execute external tools.
+
+AI agents are probabilistic. But payments, permissions, memory writes, and external actions require deterministic control.
+
+Related components:
+- Agent Security Gateway — Prompt injection and policy evasion detection
+- Agent Budget Guard — Budget and permission check before payment
+- Agent Memory API — Audit-ready memory storage
+- Agent Evolution Engine — Orchestration across the stack
+- Spec-to-Guardrail API — Extract safety rules from API specs
+
+All APIs are indexed in CDP Bazaar and support x402-style payments.
+
 ## Disclaimer
 
 This is an independent experimental project.
