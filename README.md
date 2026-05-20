@@ -1,5 +1,8 @@
 # Agent Security Gateway
 
+Scan prompts before an AI agent calls tools, stores memory, or makes paid API requests.
+Part of Agent Control Primitives — the missing security layer in CDP Bazaar.
+
 A working prototype API for checking prompt-injection and unsafe input risks before AI agents call external APIs.
 
 ## Part of AI Agent Infrastructure Safety Stack
