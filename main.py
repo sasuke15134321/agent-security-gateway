@@ -150,12 +150,11 @@ async def x402_payment_middleware(request: Request, call_next):
             _pc = {
                 "x402Version": 2,
                 "error": "Payment required",
-                "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}],
+                "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": max_amount, "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300}],
             }
             if path == "/api/security/scan":
                 _pc["resource"] = {
                     "url": "https://agent-security-gateway.onrender.com/api/security/scan",
-                    "method": "POST",
                     "description": "Security scan for AI agent requests before external API calls or x402 payments",
                     "mimeType": "application/json"
                 }
@@ -165,6 +164,13 @@ async def x402_payment_middleware(request: Request, call_next):
                 _pc["threat_type"] = None
                 _pc["risk_level"] = "unknown"
                 _pc["next_recommended"] = "complete_x402_payment"
+            elif path in _SAFETY_CHECK_DESCRIPTIONS:
+                _pc["resource"] = {
+                    "url": f"https://agent-security-gateway.onrender.com{path}",
+                    "description": _SAFETY_CHECK_DESCRIPTIONS[path],
+                    "mimeType": "application/json"
+                }
+                _pc["extensions"] = _SAFETY_CHECK_BAZAAR[path]
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     return await call_next(request)
 
