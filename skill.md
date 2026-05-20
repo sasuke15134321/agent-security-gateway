@@ -35,7 +35,7 @@ AI Agent -> Security Gateway -> Budget Guard -> x402 Payment -> Paid API -> Memo
 
 ---
 
-## Agent Insulation Primitives v0.1
+## Agent Safety Checks v0.1
 
 ### POST /api/tool/dry-run-validate
 

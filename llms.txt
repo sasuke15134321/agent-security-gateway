@@ -18,9 +18,9 @@ AI Agent -> Security Gateway -> Budget Guard -> x402 Payment -> Paid API
 Do not use this API as a firewall or intrusion detection system.
 This API is a pre-execution content safety layer.
 
-## Agent Insulation Primitives v0.1
+## Agent Safety Checks v0.1
 
-Five additional rule-based primitives for insulating agent reasoning from external action.
+Five lightweight safety checks before and after AI agents call external tools.
 No LLM calls. No payment required. Call these before and after tool execution.
 
 ### When to call each primitive

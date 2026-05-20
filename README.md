@@ -1,8 +1,7 @@
 # Agent Security Gateway
 
-agent-security-gateway is the Tool Boundary / Insulation primitive host in Agent Control Primitives.
-Agent Control Primitives are small insulation layers between agent reasoning and external action.
-Agent Control Primitives は、AIエージェントの推論と外部実行の間に差し込む小さな絶縁膜です。
+Agent Safety Checks v0.1 are lightweight APIs that help AI agents verify actions before and after calling external tools.
+Agent Safety Checks v0.1 は、AIエージェントが外部ツールを使う前後に、安全確認するための軽量API群です。
 
 Scan prompts before an AI agent calls tools, stores memory, or makes paid API requests.
 Part of Agent Control Primitives — the missing security layer in CDP Bazaar.
@@ -428,9 +427,9 @@ MIT License - See LICENSE file for details
 
 For issues and questions, please create an issue in the GitHub repository.
 
-## Agent Insulation Primitives v0.1 (beta)
+## Agent Safety Checks v0.1 (beta)
 
-Five lightweight rule-based primitives for insulating agent reasoning from external action.
+Five lightweight safety checks before and after AI agents call external tools.
 No LLM calls. No payment required. Fast synchronous checks before execution.
 
 ### 1. Tool Call Dry-run Validator
