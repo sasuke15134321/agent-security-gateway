@@ -87,7 +87,7 @@ def paid_operation(amount_usd: str) -> dict:
     }
 
 _PAID_ENDPOINTS = {
-    ("POST", "/api/security/scan"):          PRICE_USDC,
+    ("POST", "/api/security/scan"):          "0.01",
     ("POST", "/api/security/batch"):         "0.10",
     ("POST", "/api/validate/deterministic"): "0.03",
     ("POST", "/api/security/pre-payment"):   "0.03",
