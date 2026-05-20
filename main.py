@@ -1546,7 +1546,7 @@ async def dry_run_validate(payload: DryRunValidateRequest, http_request: Request
         payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _path = "/api/tool/dry-run-validate"
-            _pc = {"x402Version": 2, "error": "Payment required", "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "method": "POST", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "extensions": _SAFETY_CHECK_BAZAAR[_path]}
+            _pc = {"x402Version": 2, "error": "Payment required", "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300}], "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "extensions": _SAFETY_CHECK_BAZAAR[_path]}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _classify_tool_risks(
         payload.tool_name, payload.tool_arguments, payload.context
@@ -1614,7 +1614,7 @@ async def response_sanitize(payload: ResponseSanitizeRequest, http_request: Requ
         payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _path = "/api/tool/response-sanitize"
-            _pc = {"x402Version": 2, "error": "Payment required", "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "method": "POST", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "extensions": _SAFETY_CHECK_BAZAAR[_path]}
+            _pc = {"x402Version": 2, "error": "Payment required", "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300}], "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "extensions": _SAFETY_CHECK_BAZAAR[_path]}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _sanitize_response(payload.response_content)
     allow = decision == "allow"
@@ -1710,7 +1710,7 @@ async def schema_drift_check(payload: SchemaDriftCheckRequest, http_request: Req
         payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _path = "/api/schema/drift-check"
-            _pc = {"x402Version": 2, "error": "Payment required", "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "method": "POST", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "extensions": _SAFETY_CHECK_BAZAAR[_path]}
+            _pc = {"x402Version": 2, "error": "Payment required", "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300}], "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "extensions": _SAFETY_CHECK_BAZAAR[_path]}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _check_schema_drift(payload.original_schema, payload.updated_schema)
     allow = decision == "allow"
@@ -1806,7 +1806,7 @@ async def identity_scope_check(payload: IdentityScopeCheckRequest, http_request:
         payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _path = "/api/identity/scope-check"
-            _pc = {"x402Version": 2, "error": "Payment required", "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "method": "POST", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "extensions": _SAFETY_CHECK_BAZAAR[_path]}
+            _pc = {"x402Version": 2, "error": "Payment required", "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300}], "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "extensions": _SAFETY_CHECK_BAZAAR[_path]}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _check_identity_scope(
         payload.agent_id,
@@ -1885,7 +1885,7 @@ async def quota_check(payload: QuotaCheckRequest, http_request: Request):
         payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
             _path = "/api/quota/check"
-            _pc = {"x402Version": 2, "error": "Payment required", "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "method": "POST", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "extensions": _SAFETY_CHECK_BAZAAR[_path]}
+            _pc = {"x402Version": 2, "error": "Payment required", "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300}], "resource": {"url": f"https://agent-security-gateway.onrender.com{_path}", "description": _SAFETY_CHECK_DESCRIPTIONS[_path], "mimeType": "application/json"}, "extensions": _SAFETY_CHECK_BAZAAR[_path]}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _check_quota(
         payload.tool_calls_used, payload.tool_calls_limit,
