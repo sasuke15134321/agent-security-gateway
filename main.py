@@ -1260,6 +1260,453 @@ async def examples_md():
     return PlainTextResponse(content)
 
 
+# ============================================================
+# Agent Insulation Primitives v0.1
+# ============================================================
+
+import re as _re
+
+class DryRunValidateRequest(BaseModel):
+    tool_name: str
+    tool_arguments: Dict[str, Any] = {}
+    agent_id: str = ""
+    context: str = ""
+
+class ResponseSanitizeRequest(BaseModel):
+    tool_name: str = ""
+    response_content: str
+    agent_id: str = ""
+
+class SchemaDriftCheckRequest(BaseModel):
+    original_schema: Dict[str, Any]
+    updated_schema: Dict[str, Any]
+    tool_name: str = ""
+    agent_id: str = ""
+
+class IdentityScopeCheckRequest(BaseModel):
+    agent_id: str
+    requested_action: str
+    declared_scopes: List[str] = []
+    declared_role: str = ""
+    target_resource: str = ""
+
+class QuotaCheckRequest(BaseModel):
+    agent_id: str
+    tool_calls_used: int = 0
+    tool_calls_limit: int = 100
+    llm_calls_used: int = 0
+    llm_calls_limit: int = 50
+    payment_amount_used: float = 0.0
+    payment_amount_limit: float = 10.0
+    subagent_count_used: int = 0
+    subagent_count_limit: int = 5
+
+
+_DESTRUCTIVE_TOOL_PATTERNS = [
+    (r"pay|transfer|send.*usdc|wire|checkout|purchase|charge", "payment_action"),
+    (r"delete|remove|drop|truncate|destroy|unlink|rm\b", "file_deletion"),
+    (r"deploy|release|publish|push.*prod|rollout", "deploy_action"),
+    (r"secret|api.?key|password|token|credential|private.?key", "secret_access"),
+    (r"memory.*write|store.*memory|save.*context|write.*log", "memory_write"),
+    (r"format|wipe|overwrite|reset|flush|purge|kill|terminate", "destructive_action"),
+]
+
+_READ_ONLY_PATTERNS = [
+    r"get|fetch|read|list|search|query|check|scan|view|show|describe|info|status",
+]
+
+_DANGEROUS_ARG_KEYWORDS = [
+    "delete", "drop", "truncate", "wipe", "overwrite", "destroy",
+    "secret", "password", "token", "api_key", "private_key",
+    "prod", "production", "force",
+]
+
+
+def _classify_tool_risks(tool_name: str, tool_arguments: Dict[str, Any], context: str):
+    reasons = []
+    risk_level = "low"
+    name_lower = tool_name.lower()
+    context_lower = context.lower()
+    args_str = json.dumps(tool_arguments).lower()
+
+    matched_categories = []
+    for pattern, category in _DESTRUCTIVE_TOOL_PATTERNS:
+        if _re.search(pattern, name_lower) or _re.search(pattern, args_str) or _re.search(pattern, context_lower):
+            matched_categories.append(category)
+
+    read_only = any(_re.search(p, name_lower) for p in _READ_ONLY_PATTERNS) and not matched_categories
+    dangerous_args = [k for k in _DANGEROUS_ARG_KEYWORDS if k in args_str]
+
+    if "file_deletion" in matched_categories or "deploy_action" in matched_categories:
+        risk_level = "high"
+        reasons.extend([c for c in matched_categories if c in ("file_deletion", "deploy_action")])
+    elif matched_categories:
+        risk_level = "medium"
+        reasons.extend(matched_categories)
+    if dangerous_args:
+        risk_level = "high" if risk_level != "high" else risk_level
+        reasons.append(f"dangerous_arg_values: {dangerous_args[:3]}")
+
+    if read_only and not reasons:
+        return "allow", "low", []
+    if "file_deletion" in reasons or "deploy_action" in reasons or risk_level == "high":
+        decision = "block"
+        allow = False
+    elif reasons:
+        decision = "requires_review"
+        allow = False
+    else:
+        decision = "allow"
+        allow = True
+
+    return decision, risk_level, reasons
+
+
+@app.post(
+    "/api/tool/dry-run-validate",
+    summary="Dry-Run Tool Validator - check if a tool call is safe before execution",
+    description="Rule-based check of tool name and arguments for destructive, payment, secret-access, or deployment patterns. Returns allow/block/requires_review before the tool is executed.",
+    tags=["Insulation"],
+    responses={402: {"description": "Payment Required"}},
+)
+async def dry_run_validate(payload: DryRunValidateRequest):
+    decision, risk_level, reasons = _classify_tool_risks(
+        payload.tool_name, payload.tool_arguments, payload.context
+    )
+    allow = decision == "allow"
+    action_map = {
+        "allow": "proceed_with_tool_call",
+        "block": "reject_tool_call",
+        "requires_review": "request_human_approval",
+    }
+    return {
+        "allow": allow,
+        "decision": decision,
+        "risk_level": risk_level,
+        "reasons": reasons,
+        "recommended_action": action_map[decision],
+        "primitive": "dry-run-validate",
+    }
+
+
+_INJECTION_PATTERNS = [
+    (r"ignore (previous|prior|above|all) instructions?", "prompt_injection"),
+    (r"(reveal|show|print|output|repeat|dump).{0,30}(system prompt|instructions?|context|secret)", "system_prompt_reveal"),
+    (r"you are now|pretend (you are|to be)|act as|roleplay as|forget (you are|that you)", "instruction_override"),
+    (r"(api[_\s]?key|secret[_\s]?key|access[_\s]?token|bearer\s+[a-z0-9]{8,})", "api_key_exposure"),
+    (r"https?://(?![\w\-]+\.(com|org|net|io|gov|edu))[^\s]{8,}", "suspicious_url"),
+    (r"<(script|iframe|img|svg)[^>]*>|javascript:|data:text/html", "hidden_instruction_html"),
+    (r"\[hidden\]|\[secret\]|\[override\]|<!--.*?inject", "hidden_instruction_marker"),
+    (r"(exfiltrate|exfil|send.{0,20}(to|via).{0,20}(url|webhook|endpoint))", "data_exfiltration"),
+]
+
+
+def _sanitize_response(response_content: str):
+    reasons = []
+    risk_level = "low"
+    text = response_content.lower()
+
+    for pattern, category in _INJECTION_PATTERNS:
+        if _re.search(pattern, text):
+            reasons.append(category)
+
+    if reasons:
+        high_risk = {"prompt_injection", "system_prompt_reveal", "api_key_exposure", "data_exfiltration"}
+        if high_risk & set(reasons):
+            risk_level = "high"
+            decision = "block"
+        else:
+            risk_level = "medium"
+            decision = "requires_review"
+    else:
+        decision = "allow"
+
+    return decision, risk_level, reasons
+
+
+@app.post(
+    "/api/tool/response-sanitize",
+    summary="Tool Response Sanitizer - inspect tool responses for injected instructions",
+    description="Scans tool responses for prompt injection, system prompt leakage, API keys, suspicious URLs, and hidden instructions before the agent processes the response.",
+    tags=["Insulation"],
+    responses={402: {"description": "Payment Required"}},
+)
+async def response_sanitize(payload: ResponseSanitizeRequest):
+    decision, risk_level, reasons = _sanitize_response(payload.response_content)
+    allow = decision == "allow"
+    action_map = {
+        "allow": "pass_response_to_agent",
+        "block": "drop_response",
+        "requires_review": "redact_and_review",
+    }
+    return {
+        "allow": allow,
+        "decision": decision,
+        "risk_level": risk_level,
+        "reasons": reasons,
+        "recommended_action": action_map[decision],
+        "primitive": "response-sanitize",
+    }
+
+
+_DANGEROUS_FIELD_NAMES = [
+    "password", "secret", "api_key", "private_key", "token", "credential",
+    "sudo", "admin", "root", "execute", "eval", "shell", "command",
+]
+
+_PERMISSION_KEYWORDS = [
+    "write", "delete", "admin", "full_access", "unrestricted", "bypass",
+    "override", "escalate", "sudo", "root",
+]
+
+_SUSPICIOUS_DESC_PATTERNS = [
+    r"ignore|bypass|override|disable.{0,20}(check|validation|security|auth)",
+    r"send.{0,20}(to|data|to external|webhook)",
+    r"(eval|execute|run).{0,20}(code|command|script)",
+]
+
+
+def _check_schema_drift(original: Dict[str, Any], updated: Dict[str, Any]):
+    reasons = []
+    risk_level = "low"
+
+    orig_required = set(original.get("required", []))
+    upd_required = set(updated.get("required", []))
+    new_required = upd_required - orig_required
+    if new_required:
+        reasons.append(f"new_required_fields: {list(new_required)}")
+
+    orig_props = set(original.get("properties", {}).keys())
+    upd_props = set(updated.get("properties", {}).keys())
+    new_fields = upd_props - orig_props
+    dangerous_new = [f for f in new_fields if any(d in f.lower() for d in _DANGEROUS_FIELD_NAMES)]
+    if dangerous_new:
+        reasons.append(f"dangerous_new_fields: {dangerous_new}")
+
+    for field, schema in updated.get("properties", {}).items():
+        desc = (schema.get("description") or "").lower()
+        for pat in _SUSPICIOUS_DESC_PATTERNS:
+            if _re.search(pat, desc):
+                reasons.append(f"suspicious_description: {field}")
+                break
+
+    orig_perms = set()
+    upd_perms = set()
+    for scope_key in ("scopes", "permissions", "access"):
+        orig_perms.update(original.get(scope_key, []))
+        upd_perms.update(updated.get(scope_key, []))
+    new_perms = upd_perms - orig_perms
+    expanded = [p for p in new_perms if any(k in p.lower() for k in _PERMISSION_KEYWORDS)]
+    if expanded:
+        reasons.append(f"permission_expansion: {expanded}")
+
+    if reasons:
+        high_risk_indicators = {"dangerous_new_fields", "permission_expansion"}
+        if any(r.split(":")[0] in high_risk_indicators for r in reasons):
+            risk_level = "high"
+            decision = "block"
+        else:
+            risk_level = "medium"
+            decision = "requires_review"
+    else:
+        decision = "allow"
+
+    return decision, risk_level, reasons
+
+
+@app.post(
+    "/api/schema/drift-check",
+    summary="Schema Drift Checker - detect unexpected changes in tool schemas",
+    description="Compares original and updated tool schemas to detect new required fields, dangerous field names, suspicious descriptions, or permission expansions.",
+    tags=["Insulation"],
+    responses={402: {"description": "Payment Required"}},
+)
+async def schema_drift_check(payload: SchemaDriftCheckRequest):
+    decision, risk_level, reasons = _check_schema_drift(payload.original_schema, payload.updated_schema)
+    allow = decision == "allow"
+    action_map = {
+        "allow": "accept_schema_update",
+        "block": "reject_schema_update",
+        "requires_review": "hold_for_review",
+    }
+    return {
+        "allow": allow,
+        "decision": decision,
+        "risk_level": risk_level,
+        "reasons": reasons,
+        "recommended_action": action_map[decision],
+        "primitive": "schema-drift-check",
+    }
+
+
+_PRIVILEGED_ACTIONS = [
+    "delete", "drop", "wipe", "deploy", "publish", "admin", "root",
+    "sudo", "reset", "format", "overwrite", "terminate", "kill",
+    "write_secret", "read_secret", "access_credential",
+]
+
+_SCOPE_ACTION_MAP = {
+    "read": ["get", "list", "search", "query", "fetch", "view"],
+    "write": ["create", "update", "post", "put", "patch", "store", "save"],
+    "delete": ["delete", "remove", "drop", "destroy"],
+    "admin": ["deploy", "publish", "admin", "sudo", "root", "reset", "format"],
+    "payment": ["pay", "transfer", "charge", "purchase", "send_usdc"],
+}
+
+
+def _check_identity_scope(
+    agent_id: str,
+    requested_action: str,
+    declared_scopes: List[str],
+    declared_role: str,
+    target_resource: str,
+):
+    reasons = []
+    risk_level = "low"
+    action_lower = requested_action.lower()
+    role_lower = declared_role.lower()
+    scopes_lower = [s.lower() for s in declared_scopes]
+    resource_lower = target_resource.lower()
+
+    is_privileged = any(p in action_lower for p in _PRIVILEGED_ACTIONS)
+    if is_privileged:
+        reasons.append("privileged_operation_requested")
+
+    required_scope = None
+    for scope, keywords in _SCOPE_ACTION_MAP.items():
+        if any(k in action_lower for k in keywords):
+            required_scope = scope
+            break
+    if required_scope and required_scope not in scopes_lower and "admin" not in scopes_lower:
+        reasons.append(f"missing_scope: {required_scope}")
+
+    admin_resources = ["config", "secret", "credential", "admin", "system", "prod"]
+    if any(r in resource_lower for r in admin_resources):
+        if "admin" not in role_lower and "admin" not in scopes_lower:
+            reasons.append("role_mismatch_for_resource")
+
+    if len(declared_scopes) > 10:
+        reasons.append("excessive_scopes")
+    if "admin" in scopes_lower and "admin" not in role_lower:
+        reasons.append("admin_scope_without_admin_role")
+
+    if reasons:
+        high_risk = {"privileged_operation_requested", "missing_scope", "admin_scope_without_admin_role"}
+        if high_risk & set(r.split(":")[0] for r in reasons):
+            risk_level = "high"
+            decision = "block"
+        else:
+            risk_level = "medium"
+            decision = "requires_review"
+    else:
+        decision = "allow"
+
+    return decision, risk_level, reasons
+
+
+@app.post(
+    "/api/identity/scope-check",
+    summary="Identity Scope Checker - verify agent scopes before privileged actions",
+    description="Checks whether the agent's declared scopes and role are sufficient for the requested action. Detects scope mismatch, missing permissions, privilege escalation, and excessive scopes.",
+    tags=["Insulation"],
+    responses={402: {"description": "Payment Required"}},
+)
+async def identity_scope_check(payload: IdentityScopeCheckRequest):
+    decision, risk_level, reasons = _check_identity_scope(
+        payload.agent_id,
+        payload.requested_action,
+        payload.declared_scopes,
+        payload.declared_role,
+        payload.target_resource,
+    )
+    allow = decision == "allow"
+    action_map = {
+        "allow": "proceed_with_action",
+        "block": "deny_action",
+        "requires_review": "escalate_to_human",
+    }
+    return {
+        "allow": allow,
+        "decision": decision,
+        "risk_level": risk_level,
+        "reasons": reasons,
+        "recommended_action": action_map[decision],
+        "primitive": "identity-scope-check",
+    }
+
+
+def _check_quota(
+    tool_calls_used: int, tool_calls_limit: int,
+    llm_calls_used: int, llm_calls_limit: int,
+    payment_amount_used: float, payment_amount_limit: float,
+    subagent_count_used: int, subagent_count_limit: int,
+):
+    reasons = []
+    risk_level = "low"
+
+    if tool_calls_limit > 0 and tool_calls_used >= tool_calls_limit:
+        reasons.append(f"tool_calls_limit_exceeded: {tool_calls_used}/{tool_calls_limit}")
+    elif tool_calls_limit > 0 and tool_calls_used >= tool_calls_limit * 0.9:
+        reasons.append(f"tool_calls_near_limit: {tool_calls_used}/{tool_calls_limit}")
+
+    if llm_calls_limit > 0 and llm_calls_used >= llm_calls_limit:
+        reasons.append(f"llm_calls_limit_exceeded: {llm_calls_used}/{llm_calls_limit}")
+    elif llm_calls_limit > 0 and llm_calls_used >= llm_calls_limit * 0.9:
+        reasons.append(f"llm_calls_near_limit: {llm_calls_used}/{llm_calls_limit}")
+
+    if payment_amount_limit > 0 and payment_amount_used >= payment_amount_limit:
+        reasons.append(f"payment_limit_exceeded: {payment_amount_used}/{payment_amount_limit}")
+    elif payment_amount_limit > 0 and payment_amount_used >= payment_amount_limit * 0.9:
+        reasons.append(f"payment_near_limit: {payment_amount_used}/{payment_amount_limit}")
+
+    if subagent_count_limit > 0 and subagent_count_used >= subagent_count_limit:
+        reasons.append(f"subagent_limit_exceeded: {subagent_count_used}/{subagent_count_limit}")
+
+    exceeded = [r for r in reasons if "exceeded" in r]
+    near = [r for r in reasons if "near_limit" in r]
+
+    if exceeded:
+        risk_level = "high"
+        decision = "block"
+    elif near:
+        risk_level = "medium"
+        decision = "requires_review"
+    else:
+        decision = "allow"
+
+    return decision, risk_level, reasons
+
+
+@app.post(
+    "/api/quota/check",
+    summary="Quota Checker - enforce usage limits before tool calls or payments",
+    description="Checks current usage against configured limits for tool calls, LLM calls, payment amounts, and subagent spawning. Blocks when limits are exceeded and flags when approaching limits.",
+    tags=["Insulation"],
+    responses={402: {"description": "Payment Required"}},
+)
+async def quota_check(payload: QuotaCheckRequest):
+    decision, risk_level, reasons = _check_quota(
+        payload.tool_calls_used, payload.tool_calls_limit,
+        payload.llm_calls_used, payload.llm_calls_limit,
+        payload.payment_amount_used, payload.payment_amount_limit,
+        payload.subagent_count_used, payload.subagent_count_limit,
+    )
+    allow = decision == "allow"
+    action_map = {
+        "allow": "proceed",
+        "block": "halt_agent_execution",
+        "requires_review": "notify_operator",
+    }
+    return {
+        "allow": allow,
+        "decision": decision,
+        "risk_level": risk_level,
+        "reasons": reasons,
+        "recommended_action": action_map[decision],
+        "primitive": "quota-check",
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))

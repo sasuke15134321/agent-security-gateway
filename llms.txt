@@ -17,3 +17,50 @@ AI Agent -> Security Gateway -> Budget Guard -> x402 Payment -> Paid API
 
 Do not use this API as a firewall or intrusion detection system.
 This API is a pre-execution content safety layer.
+
+## Agent Insulation Primitives v0.1
+
+Five additional rule-based primitives for insulating agent reasoning from external action.
+No LLM calls. No payment required. Call these before and after tool execution.
+
+### When to call each primitive
+
+POST /api/tool/dry-run-validate
+Call before executing any tool call.
+Especially required when: tool name contains delete / deploy / pay / secret / reset.
+Input: tool_name / tool_arguments / agent_id / context
+Output: allow / decision / risk_level / reasons / recommended_action
+
+POST /api/tool/response-sanitize
+Call after receiving a tool response, before the agent reads the content.
+Especially required when: tool response comes from an external or untrusted source.
+Input: tool_name / response_content / agent_id
+Output: allow / decision / risk_level / reasons / recommended_action
+
+POST /api/schema/drift-check
+Call before accepting an updated tool or MCP schema.
+Especially required when: a tool schema update arrives from an external server.
+Input: original_schema / updated_schema / tool_name / agent_id
+Output: allow / decision / risk_level / reasons / recommended_action
+
+POST /api/identity/scope-check
+Call before any privileged action (delete / deploy / admin / payment).
+Especially required when: agent requests an action outside its declared role.
+Input: agent_id / requested_action / declared_scopes / declared_role / target_resource
+Output: allow / decision / risk_level / reasons / recommended_action
+
+POST /api/quota/check
+Call before each tool call, LLM call, or payment to prevent runaway execution.
+Especially required when: agent is in a loop or multi-step workflow.
+Input: agent_id / tool_calls_used / tool_calls_limit / llm_calls_used / llm_calls_limit / payment_amount_used / payment_amount_limit / subagent_count_used / subagent_count_limit
+Output: allow / decision / risk_level / reasons / recommended_action
+
+### Recommended insulation flow
+AI Agent receives task
+-> quota/check (are we within limits?)
+-> tool/dry-run-validate (is this tool call safe?)
+-> identity/scope-check (does the agent have permission?)
+-> Execute tool
+-> tool/response-sanitize (is the response safe?)
+-> Agent processes result
+-> schema/drift-check (if schema updated)

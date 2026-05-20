@@ -32,3 +32,70 @@ POST /api/security/scan
 
 ## Recommended flow
 AI Agent -> Security Gateway -> Budget Guard -> x402 Payment -> Paid API -> Memory API
+
+---
+
+## Agent Insulation Primitives v0.1
+
+### POST /api/tool/dry-run-validate
+
+**When to use**
+- Before executing any tool call with destructive potential
+- When tool name contains: delete / remove / deploy / pay / secret / reset / kill / terminate
+- Before file operations, payment actions, or memory writes
+
+**When not to use**
+- Safe read-only tool calls (get / list / search / query)
+- Internal trusted tools with no side effects
+
+---
+
+### POST /api/tool/response-sanitize
+
+**When to use**
+- After receiving a tool response from any external source
+- Before the agent reads or acts on web search results, API responses, or external data
+- When tool response content is unpredictable or user-influenced
+
+**When not to use**
+- Responses from internal trusted services
+- Simple numeric or boolean responses with no text content
+
+---
+
+### POST /api/schema/drift-check
+
+**When to use**
+- Before accepting a tool or MCP schema update from an external server
+- When a schema version changes during agent execution
+- Before registering a new tool from an untrusted source
+
+**When not to use**
+- Schema updates from internal, version-controlled repositories
+- Initial schema load on startup
+
+---
+
+### POST /api/identity/scope-check
+
+**When to use**
+- Before any privileged action: delete / deploy / admin / payment / credential access
+- When agent role or scopes are declared at runtime
+- When subagents are delegating actions to other agents
+
+**When not to use**
+- Simple read actions with no side effects
+- Agents with statically verified scopes in trusted environments
+
+---
+
+### POST /api/quota/check
+
+**When to use**
+- Before each tool call, LLM call, or payment in a multi-step workflow
+- At the start of each agent loop iteration
+- Before spawning a subagent
+
+**When not to use**
+- Single-shot agents with no loop risk
+- When quota tracking is handled by an external orchestrator
