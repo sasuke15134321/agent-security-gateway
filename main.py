@@ -87,13 +87,19 @@ def paid_operation(amount_usd: str) -> dict:
     }
 
 _PAID_ENDPOINTS = {
-    ("POST", "/api/security/scan"):          "0.01",
-    ("POST", "/api/security/batch"):         "0.10",
-    ("POST", "/api/validate/deterministic"): "0.03",
-    ("POST", "/api/security/pre-payment"):   "0.03",
-    ("POST", "/api/validate/completeness"):  "0.03",
-    ("POST", "/api/validate/list_check"):    "0.01",
-    ("POST", "/api/trust/check"):            "0.05",
+    ("POST", "/api/security/scan"):            "0.01",
+    ("POST", "/api/security/batch"):           "0.10",
+    ("POST", "/api/validate/deterministic"):   "0.03",
+    ("POST", "/api/security/pre-payment"):     "0.03",
+    ("POST", "/api/validate/completeness"):    "0.03",
+    ("POST", "/api/validate/list_check"):      "0.01",
+    ("POST", "/api/trust/check"):              "0.05",
+    # Agent Safety Checks v0.1
+    ("POST", "/api/tool/dry-run-validate"):    "0.01",
+    ("POST", "/api/tool/response-sanitize"):   "0.01",
+    ("POST", "/api/schema/drift-check"):       "0.01",
+    ("POST", "/api/identity/scope-check"):     "0.01",
+    ("POST", "/api/quota/check"):              "0.01",
 }
 
 # CDP Bazaar indexing extension for /api/security/scan
@@ -465,7 +471,27 @@ async def x402_discovery_manifest():
             "https://agent-security-gateway.onrender.com/api/security/pre-payment",
             "https://agent-security-gateway.onrender.com/api/validate/completeness",
             "https://agent-security-gateway.onrender.com/api/validate/list_check",
-            "https://agent-security-gateway.onrender.com/api/trust/check"
+            "https://agent-security-gateway.onrender.com/api/trust/check",
+            {
+                "url": "https://agent-security-gateway.onrender.com/api/tool/dry-run-validate",
+                "description": "Check tool arguments before an AI agent executes an external tool call."
+            },
+            {
+                "url": "https://agent-security-gateway.onrender.com/api/tool/response-sanitize",
+                "description": "Sanitize external tool responses before they are passed back to an AI agent."
+            },
+            {
+                "url": "https://agent-security-gateway.onrender.com/api/schema/drift-check",
+                "description": "Detect risky changes in MCP tool schemas, OpenAPI specs, or JSON schemas."
+            },
+            {
+                "url": "https://agent-security-gateway.onrender.com/api/identity/scope-check",
+                "description": "Check whether an AI agent has the required scope for a requested action."
+            },
+            {
+                "url": "https://agent-security-gateway.onrender.com/api/quota/check",
+                "description": "Check whether an AI agent is within tool call, LLM call, memory write, payment, or sub-agent limits."
+            }
         ],
         "ownershipProofs": [
             "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
@@ -1369,7 +1395,12 @@ def _classify_tool_risks(tool_name: str, tool_arguments: Dict[str, Any], context
     tags=["Insulation"],
     responses={402: {"description": "Payment Required"}},
 )
-async def dry_run_validate(payload: DryRunValidateRequest):
+async def dry_run_validate(payload: DryRunValidateRequest, http_request: Request):
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _classify_tool_risks(
         payload.tool_name, payload.tool_arguments, payload.context
     )
@@ -1431,7 +1462,12 @@ def _sanitize_response(response_content: str):
     tags=["Insulation"],
     responses={402: {"description": "Payment Required"}},
 )
-async def response_sanitize(payload: ResponseSanitizeRequest):
+async def response_sanitize(payload: ResponseSanitizeRequest, http_request: Request):
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _sanitize_response(payload.response_content)
     allow = decision == "allow"
     action_map = {
@@ -1521,7 +1557,12 @@ def _check_schema_drift(original: Dict[str, Any], updated: Dict[str, Any]):
     tags=["Insulation"],
     responses={402: {"description": "Payment Required"}},
 )
-async def schema_drift_check(payload: SchemaDriftCheckRequest):
+async def schema_drift_check(payload: SchemaDriftCheckRequest, http_request: Request):
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _check_schema_drift(payload.original_schema, payload.updated_schema)
     allow = decision == "allow"
     action_map = {
@@ -1611,7 +1652,12 @@ def _check_identity_scope(
     tags=["Insulation"],
     responses={402: {"description": "Payment Required"}},
 )
-async def identity_scope_check(payload: IdentityScopeCheckRequest):
+async def identity_scope_check(payload: IdentityScopeCheckRequest, http_request: Request):
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _check_identity_scope(
         payload.agent_id,
         payload.requested_action,
@@ -1684,7 +1730,12 @@ def _check_quota(
     tags=["Insulation"],
     responses={402: {"description": "Payment Required"}},
 )
-async def quota_check(payload: QuotaCheckRequest):
+async def quota_check(payload: QuotaCheckRequest, http_request: Request):
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     decision, risk_level, reasons = _check_quota(
         payload.tool_calls_used, payload.tool_calls_limit,
         payload.llm_calls_used, payload.llm_calls_limit,
