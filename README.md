@@ -427,6 +427,25 @@ MIT License - See LICENSE file for details
 
 For issues and questions, please create an issue in the GitHub repository.
 
+## Agent Pay / Safety Shelf
+
+Five lightweight safety check APIs for AI agents before and after external tool calls.
+Use one check, or combine as a safety chain.
+
+| Primitive | When to use | Endpoint | Price |
+|---|---|---|---|
+| Tool Call Dry-run Validator | Before executing any external tool | POST /api/tool/dry-run-validate | 0.01 USDC |
+| Tool Response Sanitizer | After receiving external tool output | POST /api/tool/response-sanitize | 0.01 USDC |
+| Schema Drift Checker | When tool schema may have changed | POST /api/schema/drift-check | 0.01 USDC |
+| Identity Scope Checker | Before privileged actions | POST /api/identity/scope-check | 0.01 USDC |
+| Quota Limit Checker | Before any paid or resource-intensive action | POST /api/quota/check | 0.01 USDC |
+
+**Entry point:**
+- POST /api/security/scan — 0.05 USDC
+- General security scan before external API calls or x402 payments.
+
+---
+
 ## Agent Safety Checks v0.1 (beta)
 
 Five lightweight safety checks before and after AI agents call external tools.
