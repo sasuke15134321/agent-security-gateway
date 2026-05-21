@@ -282,47 +282,97 @@ async def get_agent_policy():
 
 @app.get("/.well-known/mcp/server-card.json", include_in_schema=False)
 async def mcp_server_card():
-    """Smithery MCP server card - allows Smithery to discover tools without MCP protocol scan"""
+    """Smithery MCP server card - tool discovery without MCP protocol scan"""
     return {
         "serverInfo": {
             "name": "agent-security-gateway",
-            "version": "1.0.0"
+            "version": "2.0.0"
         },
         "tools": [
             {
                 "name": "security_scan",
-                "description": "Scan text for prompt injection and threats",
+                "description": "Scan text for prompt injection, jailbreak attempts, PII, and data exfiltration (0.01 USDC). Call before passing external input to an AI agent.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "content": {"type": "string"},
-                        "content_type": {"type": "string"}
+                        "content":      {"type": "string", "description": "Text to scan"},
+                        "content_type": {"type": "string", "description": "text / code / prompt / message", "default": "prompt"},
+                        "sensitivity":  {"type": "string", "description": "low / medium / high / critical", "default": "medium"}
                     },
                     "required": ["content"]
                 }
             },
             {
-                "name": "pre_payment_check",
-                "description": "Check API safety before x402 payment",
+                "name": "dry_run_validate",
+                "description": "Validate a tool call before execution — blocks file deletions, payments, secret access, and other destructive operations (0.01 USDC).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "api_url": {"type": "string"},
-                        "amount_usdc": {"type": "number"}
+                        "tool_name":      {"type": "string", "description": "Name of the tool to validate"},
+                        "context":        {"type": "string", "description": "Context hint, e.g. file_deletion / payment / read_only"},
+                        "tool_arguments": {"type": "object", "description": "Arguments dict to inspect"},
+                        "agent_id":       {"type": "string", "description": "Agent identifier for audit logging"}
                     },
-                    "required": ["api_url", "amount_usdc"]
+                    "required": ["tool_name"]
                 }
             },
             {
-                "name": "validate_completeness",
-                "description": "Validate task list completeness",
+                "name": "response_sanitize",
+                "description": "Sanitize an external tool response before returning it to an AI agent — detects prompt injection and secret exposure (0.01 USDC).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "expected_items": {"type": "array"},
-                        "actual_items": {"type": "array"}
+                        "response_content": {"type": "string", "description": "Raw response text from external tool or API"},
+                        "tool_name":        {"type": "string", "description": "Name of the tool that produced the response"},
+                        "agent_id":         {"type": "string", "description": "Agent identifier for audit logging"}
                     },
-                    "required": ["expected_items", "actual_items"]
+                    "required": ["response_content"]
+                }
+            },
+            {
+                "name": "schema_drift_check",
+                "description": "Detect risky changes between two versions of a tool schema or OpenAPI spec (0.01 USDC). Flags new dangerous fields and permission-widening changes.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "original_schema": {"type": "object", "description": "Previously trusted schema"},
+                        "updated_schema":  {"type": "object", "description": "New schema to compare against"},
+                        "tool_name":       {"type": "string", "description": "Name of the tool whose schema changed"},
+                        "agent_id":        {"type": "string", "description": "Agent identifier for audit logging"}
+                    },
+                    "required": ["original_schema", "updated_schema"]
+                }
+            },
+            {
+                "name": "identity_scope_check",
+                "description": "Check whether an AI agent's declared scopes permit the requested action — blocks privilege escalation (0.01 USDC).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "agent_id":         {"type": "string", "description": "Agent identifier"},
+                        "requested_action": {"type": "string", "description": "Action the agent wants to perform"},
+                        "declared_scopes":  {"type": "array",  "items": {"type": "string"}, "description": "Scopes the agent claims to have"},
+                        "declared_role":    {"type": "string", "description": "Role the agent claims"},
+                        "target_resource":  {"type": "string", "description": "Resource being accessed"}
+                    },
+                    "required": ["agent_id", "requested_action"]
+                }
+            },
+            {
+                "name": "quota_check",
+                "description": "Check whether an AI agent is within its tool call, LLM call, and payment limits — halts runaway agents (0.01 USDC).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "agent_id":              {"type": "string",  "description": "Agent identifier"},
+                        "tool_calls_used":        {"type": "integer", "description": "Tool calls made so far", "default": 0},
+                        "tool_calls_limit":       {"type": "integer", "description": "Maximum allowed tool calls", "default": 100},
+                        "llm_calls_used":         {"type": "integer", "description": "LLM API calls made so far", "default": 0},
+                        "llm_calls_limit":        {"type": "integer", "description": "Maximum allowed LLM calls", "default": 50},
+                        "payment_amount_used":    {"type": "number",  "description": "USDC spent so far", "default": 0.0},
+                        "payment_amount_limit":   {"type": "number",  "description": "Maximum allowed USDC spend", "default": 10.0}
+                    },
+                    "required": ["agent_id"]
                 }
             }
         ],
