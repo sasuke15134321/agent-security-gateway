@@ -1915,6 +1915,16 @@ async def quota_check(payload: QuotaCheckRequest, http_request: Request):
     }
 
 
+# ── MCP Server mount (Smithery registration at /mcp) ──────────────────────────
+from mcp_server import mcp as _mcp_server
+
+try:
+    app.mount("/mcp", _mcp_server.streamable_http_app())
+except Exception as _mcp_err:
+    import logging
+    logging.getLogger(__name__).warning(f"MCP mount failed: {_mcp_err}")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
