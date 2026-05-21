@@ -87,7 +87,7 @@ def paid_operation(amount_usd: str) -> dict:
     }
 
 _PAID_ENDPOINTS = {
-    ("POST", "/api/security/scan"):            "0.01",
+    ("POST", "/api/security/scan"):            "0.05",
     ("POST", "/api/security/batch"):           "0.10",
     ("POST", "/api/validate/deterministic"):   "0.03",
     ("POST", "/api/security/pre-payment"):     "0.03",
@@ -573,7 +573,7 @@ async def security_scan(request: SecurityScanRequest, http_request: Request):
     if not TEST_MODE:
         payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
         if not payment_header:
-            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "10000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
+            _pc = {"x402Version": 2, "accepts": [{"scheme": "exact", "network": "eip155:8453", "amount": "50000", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE", "maxTimeoutSeconds": 300, "resource": {"method": "POST", "mimeType": "application/json"}}], "error": "Payment required"}
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
 
         is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, PRICE_USDC)
@@ -1290,15 +1290,29 @@ async def root():
             "list_count_check": "/api/validate/list_check",
             "threat_stats": "/api/security/threats",
             "health": "/health",
-            "discovery": "/.well-known/x402.json"
+            "discovery": "/.well-known/x402.json",
+            "agent_safety_checks_v0_1": {
+                "dry_run_validate": "/api/tool/dry-run-validate",
+                "response_sanitize": "/api/tool/response-sanitize",
+                "schema_drift_check": "/api/schema/drift-check",
+                "identity_scope_check": "/api/identity/scope-check",
+                "quota_check": "/api/quota/check"
+            }
         },
         "pricing": {
-            "security_scan": f"{PRICE_USDC} USDC",
+            "security_scan": "0.05 USDC (entry / general security scan)",
             "batch_scan": "0.10 USDC",
             "pre_payment_check": "0.03 USDC",
             "deterministic_validate": "0.03 USDC",
             "completeness_check": "0.03 USDC",
-            "list_count_check": "0.01 USDC"
+            "list_count_check": "0.01 USDC",
+            "agent_safety_checks_v0_1": {
+                "dry_run_validate": "0.01 USDC",
+                "response_sanitize": "0.01 USDC",
+                "schema_drift_check": "0.01 USDC",
+                "identity_scope_check": "0.01 USDC",
+                "quota_check": "0.01 USDC"
+            }
         },
         "network": NETWORK,
         "currency": "USDC",
