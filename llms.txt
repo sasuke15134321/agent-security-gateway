@@ -14,6 +14,12 @@ Each Safety Check: 0.01 USDC per call.
 
 Use one check, or combine as a safety chain.
 
+## Note
+
+This API is part of Agent Control Primitives.
+Agent Control Primitives is not a payment rail, wallet, custodian, or x402 facilitator.
+It provides lightweight safety, budget, approval, context, and audit primitives around agent actions and payments.
+
 ## Implementation
 
 All endpoints support x402 payment protocol (Base mainnet, USDC).
