@@ -173,6 +173,31 @@ async def x402_payment_middleware(request: Request, call_next):
                     "mimeType": "application/json"
                 }
                 _pc["extensions"] = _SAFETY_CHECK_BAZAAR[path]
+            elif path == "/api/security/metadata-sanitize":
+                _pc["resource"] = {
+                    "url": "https://agent-security-gateway.onrender.com/api/security/metadata-sanitize",
+                    "description": "Scan payment metadata for PII, credentials, and suspicious instructions",
+                    "mimeType": "application/json"
+                }
+                _pc["extensions"] = {
+                    "bazaar": {
+                        "info": {
+                            "input": {"type": "http", "method": "POST", "bodyType": "json",
+                                      "body": {"payment_protocol": "x402", "metadata_payload": {"purpose": "AI API fee"}}},
+                            "output": {"type": "json", "example": {"sanitization_status": "ok",
+                                       "safe_to_send_to_payment_metadata": True, "detected_sensitive_fields": []}}
+                        },
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "sanitization_status": {"type": "string"},
+                                "safe_to_send_to_payment_metadata": {"type": "boolean"},
+                                "detected_sensitive_fields": {"type": "array"},
+                                "recommended_next_step": {"type": "string"}
+                            }
+                        }
+                    }
+                }
             return JSONResponse(status_code=402, content=_pc, headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()})
     return await call_next(request)
 
