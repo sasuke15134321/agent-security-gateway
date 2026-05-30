@@ -111,6 +111,49 @@ process result
 schema/drift-check (if schema changed)
 ```
 
+---
+
+## POST /api/security/metadata-sanitize (0.05 USDC) — JP Metadata Sanitizer v0.1
+
+**When to use**
+- Before sending x402 / JPYC / USDC / A2A payment metadata to an external service
+- When payment metadata includes fields from user input, external APIs, or AI-generated content
+- Before storing metadata in a facilitator, ledger, or external audit service
+- Any time you need `safe_to_send_to_payment_metadata: true` confirmation
+
+**When not to use**
+- After payment is already sent
+- For scanning prompt content (use /api/security/scan instead)
+- For budget or quota checking (use Agent Budget Guard)
+
+**What it detects**
+- email, phone, address (PII) → flagged
+- api_key, private_key, password, auth_token (credentials) → blocked
+- invoice_number, contract_id, bank_account (financial identifiers) → flagged
+- external_url → flagged
+- suspicious_instruction (hidden directives) → flagged or blocked
+
+**Key output field**
+`safe_to_send_to_payment_metadata: true` means metadata is clean to transmit.
+
+**Constraints**
+- Metadata content is never stored or logged (does_not_store_metadata)
+- No legal or compliance judgement is made
+
+---
+
+## Pre-Payment Safety Chain
+
+```
+before x402 / USDC / JPYC payment:
+  ↓
+metadata-sanitize (metadata clean?)
+  ↓
+pre-payment check (URL/amount safe?)
+  ↓
+execute payment
+```
+
 ## Related APIs
 
 - Agent Budget Guard: https://agent-budget-guard.onrender.com

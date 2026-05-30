@@ -88,6 +88,82 @@ class SecurityEngine:
             "critical": 80
         }
 
+        # Metadata sanitization patterns (JP Metadata Sanitizer v0.1)
+        # Reused from existing patterns + new categories
+        self.metadata_patterns = {
+            # Reused: email (from personal_info_leak)
+            "email": [
+                r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
+            ],
+            # Reused: phone (from personal_info_leak)
+            "phone": [
+                r"\b(?:phone|tel|mobile)\s*[:=\s]\s*\+?[\d\s\-\(\)]{10,15}",
+                r"\b0\d{1,4}[\-\s]\d{1,4}[\-\s]\d{4}\b"
+            ],
+            # Reused: api_key (from api_key_exposure)
+            "api_key": [
+                r"(?:api[_\-]?key|secret[_\-]?key|access[_\-]?token)\s*[:=]\s*['\"]?[A-Za-z0-9\-_]{20,}['\"]?",
+                r"sk-[A-Za-z0-9]{32,}",
+                r"(?:aws[_\-]?(?:access[_\-]?key|secret))\s*[:=]\s*['\"]?[A-Za-z0-9\-_]{20,}['\"]?"
+            ],
+            # Reused: auth_token (from api_key_exposure / personal_info_leak)
+            "auth_token": [
+                r"Bearer\s+[A-Za-z0-9\-_\.]{20,}",
+                r"(?:auth[_\-]?token|access[_\-]?token)\s*[:=]\s*['\"]?[A-Za-z0-9\-_]{20,}['\"]?"
+            ],
+            # Reused: password (from personal_info_leak)
+            "password": [
+                r"\b(?:password|pwd|passwd)\s*[:=]\s*\S+"
+            ],
+            # Reused: external_url (from malicious_url - all URLs in metadata are flagged)
+            "external_url": [
+                r"https?://[^\s\"']{10,}",
+                r"ftp://[^\s\"']+"
+            ],
+            # Reused: suspicious_instruction (from jailbreak / prompt_injection)
+            "suspicious_instruction": [
+                r"ignore\s+(?:all\s+)?(?:previous\s+)?instructions",
+                r"do\s+not\s+(?:log|record|report|save|send)",
+                r"(?:実行するな|記録するな|レポートするな|報告するな|ログに残すな|保存するな)",
+                r"(?:内部|機密|秘密|社外秘|外部への送信禁止)"
+            ],
+            # New: address (Japanese address indicators)
+            "address": [
+                r"〒\s*\d{3}[\-\s]?\d{4}",
+                r"\d+\s*番地",
+                r"\d+\s*丁目",
+                r"\d+\s*(?:号室|号棟)",
+                r"(?:都|道|府|県)\S+(?:市|区|町|村)"
+            ],
+            # New: private_key (PEM format)
+            "private_key": [
+                r"-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE\s+KEY-----"
+            ],
+            # New: invoice_number
+            "invoice_number": [
+                r"(?i)(?:invoice|INV)[\-_#\s]?[0-9A-Z\-]{3,20}",
+                r"(?:請求書?|請求番号)\s*[:：]?\s*[0-9\-A-Z]{3,}"
+            ],
+            # New: contract_id
+            "contract_id": [
+                r"(?i)(?:contract[_\-]?(?:id|no|number)|CNT)[\-_#\s]?[0-9A-Z\-]{3,20}",
+                r"(?:契約番号|契約ID)\s*[:：]?\s*[0-9\-A-Z]{3,}"
+            ],
+            # New: bank_account
+            "bank_account": [
+                r"(?i)bank\s*account",
+                r"口座番号",
+                r"銀行\s*口座",
+                r"ゆうちょ",
+                r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}[A-Z0-9]{0,16}\b"  # IBAN
+            ]
+        }
+
+        # Metadata risk classification
+        self._metadata_credential_categories = {"api_key", "private_key", "auth_token", "password"}
+        self._metadata_pii_categories = {"email", "phone", "address", "bank_account", "invoice_number", "contract_id"}
+        self._metadata_risky_categories = {"external_url", "suspicious_instruction"}
+
     async def scan_content(self, content: str, content_type: str = "text",
                           sensitivity: str = "medium") -> Dict[str, Any]:
         """
@@ -417,6 +493,97 @@ class SecurityEngine:
             sanitized = re.sub(r'\/\*.*?\*\/', '', sanitized, flags=re.DOTALL)
 
         return sanitized.strip()
+
+    # ------------------------------------------------------------------
+    # JP Metadata Sanitizer v0.1 — metadata-specific scanning
+    # Does NOT store metadata content. Returns detection results only.
+    # ------------------------------------------------------------------
+
+    def _iter_metadata_fields(self, obj: Any, prefix: str = "") -> List[tuple]:
+        """Recursively yield (field_path, value_str) pairs from a metadata dict."""
+        items = []
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                path = f"{prefix}.{k}" if prefix else k
+                if isinstance(v, (dict, list)):
+                    items.extend(self._iter_metadata_fields(v, path))
+                else:
+                    items.append((path, str(v)))
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                path = f"{prefix}[{i}]"
+                if isinstance(v, (dict, list)):
+                    items.extend(self._iter_metadata_fields(v, path))
+                else:
+                    items.append((path, str(v)))
+        return items
+
+    def _detect_metadata_categories(self, text: str) -> List[str]:
+        """Return list of sensitive category names detected in a string."""
+        found = []
+        for category, patterns in self.metadata_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, text, re.IGNORECASE | re.DOTALL):
+                    found.append(category)
+                    break
+        return found
+
+    async def scan_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Scan payment metadata for sensitive fields.
+        Returns detection results only — metadata content is never stored or logged.
+        """
+        detected_fields: List[str] = []
+        detected_categories: List[str] = []
+        credential_found = False
+        pii_found = False
+        risky_found = False
+
+        for field_path, field_value in self._iter_metadata_fields(metadata):
+            cats = self._detect_metadata_categories(field_value)
+            if cats:
+                detected_fields.append(field_path)
+                detected_categories.extend(cats)
+                if any(c in self._metadata_credential_categories for c in cats):
+                    credential_found = True
+                if any(c in self._metadata_pii_categories for c in cats):
+                    pii_found = True
+                if any(c in self._metadata_risky_categories for c in cats):
+                    risky_found = True
+
+        # Deduplicate while preserving order
+        seen: set = set()
+        unique_categories: List[str] = []
+        for c in detected_categories:
+            if c not in seen:
+                seen.add(c)
+                unique_categories.append(c)
+
+        if credential_found:
+            sanitization_status = "blocked"
+            safe_to_send = False
+            recommended_next_step = "block_and_escalate"
+            risk_level = "high"
+        elif pii_found or risky_found:
+            sanitization_status = "flagged"
+            safe_to_send = False
+            recommended_next_step = "redact_before_payment"
+            risk_level = "medium"
+        else:
+            sanitization_status = "ok"
+            safe_to_send = True
+            recommended_next_step = "proceed"
+            risk_level = "low"
+
+        return {
+            "sanitization_status": sanitization_status,
+            "detected_sensitive_fields": detected_fields,
+            "detected_categories": unique_categories,
+            "redaction_required": len(detected_fields) > 0,
+            "safe_to_send_to_payment_metadata": safe_to_send,
+            "risk_level": risk_level,
+            "recommended_next_step": recommended_next_step
+        }
 
     def hash_content(self, content: str) -> str:
         """Generate hash of content for logging"""

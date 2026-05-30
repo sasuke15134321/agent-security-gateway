@@ -10,6 +10,7 @@ Use before or after external tool calls:
 - quota-check: before paid or resource-intensive actions
 
 Entry: /api/security/scan (0.05 USDC) — general scan before API calls or payments.
+Metadata Safety: /api/security/metadata-sanitize (0.05 USDC) — scan payment metadata before transmission.
 Each Safety Check: 0.01 USDC per call.
 
 Use one check, or combine as a safety chain.
@@ -62,6 +63,16 @@ POST /api/quota/check
 - Output: allow, decision, risk_level, reasons, recommended_action
 - Price: 0.01 USDC
 
+### JP Metadata Sanitizer v0.1 (Live API)
+
+POST /api/security/metadata-sanitize
+- Scans payment metadata for sensitive fields before x402/USDC/JPYC/A2A payment transmission
+- Detects: email, phone, address, api_key, private_key, password, auth_token, invoice_number, contract_id, bank_account, external_url, suspicious_instruction
+- Input: payment_protocol, metadata_payload (dict), context_type, payment_purpose, scan_targets
+- Output: sanitization_status (ok/flagged/blocked), detected_sensitive_fields, detected_categories, redaction_required, safe_to_send_to_payment_metadata, risk_level, recommended_next_step
+- Price: 0.05 USDC
+- Constraint: metadata content is never stored or sent externally (does_not_store_metadata)
+
 ## Recommended Flow
 
 AI Agent receives task
@@ -71,7 +82,14 @@ AI Agent receives task
 -> Execute tool
 -> tool/response-sanitize (is the response safe?)
 -> Agent processes result
--> schema/drift-check (if schema updated)
+-> schema/drift-check (if schema changed)
+
+## Pre-Payment Safety Flow (x402 / USDC / JPYC)
+
+Before payment:
+-> /api/security/metadata-sanitize (safe_to_send_to_payment_metadata: true?)
+-> /api/security/pre-payment (safe_to_pay: true?)
+-> Execute payment
 
 ## Threat Detection
 

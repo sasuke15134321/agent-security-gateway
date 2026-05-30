@@ -100,6 +100,8 @@ _PAID_ENDPOINTS = {
     ("POST", "/api/schema/drift-check"):       "0.01",
     ("POST", "/api/identity/scope-check"):     "0.01",
     ("POST", "/api/quota/check"):              "0.01",
+    # JP Metadata Sanitizer v0.1
+    ("POST", "/api/security/metadata-sanitize"): "0.05",
 }
 
 # CDP Bazaar indexing extension for /api/security/scan
@@ -227,6 +229,22 @@ class ListCheckRequest(BaseModel):
 
 class TrustCheckRequest(BaseModel):
     url: str = Field(..., description="API URL to check (e.g. https://example.com)")
+
+class MetadataSanitizeRequest(BaseModel):
+    payment_protocol: str = Field("x402", description="Payment protocol (x402 / jpyc / other)")
+    metadata_payload: Dict[str, Any] = Field(..., description="Metadata object to scan. Content is never stored.")
+    context_type: str = Field("payment_metadata", description="Context type (x402 / A2A / AtoA / other)")
+    payment_purpose: str = Field("", description="Payment purpose description")
+    scan_targets: Optional[List[str]] = Field(None, description="Categories to scan. Default: all. Options: pii, credential, invoice, external_link, suspicious_instruction")
+
+class MetadataSanitizeResponse(BaseModel):
+    sanitization_status: str
+    detected_sensitive_fields: List[str]
+    detected_categories: List[str]
+    redaction_required: bool
+    safe_to_send_to_payment_metadata: bool
+    risk_level: str
+    recommended_next_step: str
 
 # Response models
 class NextRecommendation(BaseModel):
@@ -505,6 +523,23 @@ async def x402_discovery():
                         "specialization": "list-count-validation"
                     }
                 }
+            },
+            {
+                "path": "/api/security/metadata-sanitize",
+                "method": "POST",
+                "price": "0.05",
+                "currency": "USDC",
+                "network": "base",
+                "description": "支払いメタデータの機密フィールド検出 - PII/認証情報/契約情報/危険命令の検出。メタデータ本文は保存しない。",
+                "category": "security",
+                "tags": ["metadata", "sanitize", "pii", "credential", "x402", "payment-safety", "pre-payment"],
+                "extensions": {
+                    "bazaar": {
+                        "discoverable": True,
+                        "language": ["ja", "en"],
+                        "specialization": "payment-metadata-safety"
+                    }
+                }
             }
         ]
     }
@@ -547,6 +582,10 @@ async def x402_discovery_manifest():
             {
                 "url": "https://agent-security-gateway.onrender.com/api/quota/check",
                 "description": "Check whether an AI agent is within tool call, LLM call, memory write, payment, or sub-agent limits."
+            },
+            {
+                "url": "https://agent-security-gateway.onrender.com/api/security/metadata-sanitize",
+                "description": "Scan payment metadata for PII, credentials, contract details, and suspicious instructions before x402/USDC/JPYC payment transmission."
             }
         ],
         "ownershipProofs": [
@@ -1228,6 +1267,75 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
     }
 
 
+@app.post(
+    "/api/security/metadata-sanitize",
+    summary="Metadata Sanitizer - Detect sensitive fields in payment metadata",
+    description=(
+        "Scans payment metadata (x402/USDC/JPYC/A2A) for PII, credentials, contract details, "
+        "and suspicious instructions before transmission. "
+        "Returns safe_to_send_to_payment_metadata flag. "
+        "Metadata content is never stored or logged."
+    ),
+    tags=["Security"],
+    response_model=MetadataSanitizeResponse,
+    responses={402: {"description": "Payment Required"}},
+    openapi_extra=paid_operation("0.05")
+)
+async def sanitize_metadata(request: MetadataSanitizeRequest, http_request: Request):
+    """JP Metadata Sanitizer v0.1 — payment metadata safety check (0.05 USDC)"""
+
+    if not TEST_MODE:
+        payment_header = http_request.headers.get("PAYMENT-SIGNATURE") or http_request.headers.get("X-PAYMENT")
+        if not payment_header:
+            _pc = {
+                "x402Version": 2,
+                "error": "Payment required",
+                "accepts": [{
+                    "scheme": "exact",
+                    "network": "eip155:8453",
+                    "amount": "50000",
+                    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    "payTo": "0x60c402878EfcEcAe5733A88075328Aa2320C39BE",
+                    "maxTimeoutSeconds": 300,
+                    "resource": {"method": "POST", "mimeType": "application/json"}
+                }]
+            }
+            return JSONResponse(
+                status_code=402,
+                content=_pc,
+                headers={"PAYMENT-REQUIRED": base64.b64encode(json.dumps(_pc).encode()).decode()}
+            )
+
+        is_valid = await payment_verifier.verify_payment(payment_header, WALLET_ADDRESS, "0.05")
+        if not is_valid:
+            raise HTTPException(status_code=402, detail="Payment verification failed")
+
+    try:
+        import hashlib as _hashlib
+        result = await security_engine.scan_metadata(request.metadata_payload)
+
+        # Log scan result (aggregate/result info only — no metadata content)
+        try:
+            metadata_hash = _hashlib.sha256(
+                json.dumps(request.metadata_payload, sort_keys=True).encode()
+            ).hexdigest()[:32]
+            await security_db.log_scan_result(
+                content_hash=metadata_hash,
+                content_type="payment_metadata",
+                risk_score={"high": 80, "medium": 45, "low": 10}.get(result["risk_level"], 10),
+                threats_detected=result["detected_categories"],
+                sensitivity="high"
+            )
+        except Exception as db_err:
+            print(f"[WARN] Metadata sanitize log failed (non-fatal): {db_err}")
+
+        return MetadataSanitizeResponse(**result)
+
+    except Exception as e:
+        print(f"[ERROR] Metadata sanitize failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Metadata sanitize failed: {str(e)}")
+
+
 @app.get("/api/security/threats", response_model=ThreatStatsResponse, include_in_schema=False)
 async def get_threat_stats():
     """Get threat detection statistics (free endpoint)"""
@@ -1297,7 +1405,8 @@ async def root():
                 "schema_drift_check": "/api/schema/drift-check",
                 "identity_scope_check": "/api/identity/scope-check",
                 "quota_check": "/api/quota/check"
-            }
+            },
+            "metadata_sanitize": "/api/security/metadata-sanitize"
         },
         "pricing": {
             "security_scan": "0.05 USDC (entry / general security scan)",
@@ -1306,6 +1415,7 @@ async def root():
             "deterministic_validate": "0.03 USDC",
             "completeness_check": "0.03 USDC",
             "list_count_check": "0.01 USDC",
+            "metadata_sanitize": "0.05 USDC",
             "agent_safety_checks_v0_1": {
                 "dry_run_validate": "0.01 USDC",
                 "response_sanitize": "0.01 USDC",
