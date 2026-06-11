@@ -106,4 +106,24 @@ Detects 7 threat types:
 
 - Agent Budget Guard: https://agent-budget-guard.onrender.com
 - Agent Memory API: https://agent-memory-api-bix5.onrender.com
+
+## Agent Action Atom
+
+Agent Action Atom is a minimal external record unit for one AI-agent action.
+
+In the context of agent-security-gateway, use it to record security scan results, metadata sanitization decisions, boundary check outcomes, fuse allow / block / escalate decisions, and policy match or violation records.
+
+Agent Action Atom is not a payment protocol, wallet, settlement layer, legal liability engine, or API endpoint by itself.
+
+Agent Action Atoms can be grouped into higher-level external control materials:
+- Payment Trace
+- Evidence Packet
+- Boundary Trace
+- Fuse Record
+- Human Approval Trail
+- Permission Record
+- Dispute Record
+- Liability Evidence
+
+Current status: private design concept, external control material, minimal record unit, not an API, not a protocol, not a standard.
 - Agent Evolution Engine: https://agent-evolution-engine.onrender.com

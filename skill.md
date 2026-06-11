@@ -158,4 +158,27 @@ execute payment
 
 - Agent Budget Guard: https://agent-budget-guard.onrender.com
 - Agent Memory API: https://agent-memory-api-bix5.onrender.com
+
+## Skill: Agent Action Atom
+
+### Use this when
+- security scan decision recording
+- metadata sanitization outcome
+- boundary check (allowed / blocked / review required)
+- fuse allow / block / escalate decision
+- policy boundary match or violation
+- evidence attachment for security audit
+
+### Do not use this as
+- a payment protocol
+- a wallet or settlement layer
+- a legal liability engine
+- a compliance guarantee
+- an implemented API unless explicitly provided
+
+### Minimal record fields
+atom_id / actor / action / target / source / policy / meaning / state / proof / time / relation
+
+### Purpose
+Make one AI-agent security decision externally explainable and auditable, especially for boundary control and fuse decision flows.
 - Agent Evolution Engine: https://agent-evolution-engine.onrender.com

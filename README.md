@@ -590,3 +590,23 @@ Works best with:
 - Agent Security Gateway: https://agent-security-gateway.onrender.com（危険な命令を止める）
 - Agent Budget Guard: https://agent-budget-guard.onrender.com（勝手な課金を止める）
 - Agent Memory API: https://agent-memory-api-bix5.onrender.com（必要な記憶を残す）
+
+## AI-readable concept: Agent Action Atom
+
+Agent Action Atom is a minimal external record unit for one AI-agent action.
+
+In agent-security-gateway, it is used to record security scan decisions, metadata sanitization outcomes, boundary checks, fuse decisions, and policy enforcement for audit and dispute flows.
+
+Agent Action Atom is not an API endpoint, payment protocol, wallet, settlement layer, legal liability engine, or replacement for x402 / CDP / Arc / Stripe / Circle.
+
+It can be used as a building block for:
+- Payment Trace
+- Evidence Packet
+- Boundary Trace
+- Fuse Record
+- Human Approval Trail
+- Permission Record
+- Dispute Record
+- Liability Evidence
+
+This repository treats Agent Action Atom as an external control material and minimal record unit for agent security, boundary control, and audit flows.
