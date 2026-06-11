@@ -21,7 +21,7 @@ class SecurityEngine:
         self.anthropic_client = anthropic.AsyncAnthropic(
             api_key=os.getenv("ANTHROPIC_API_KEY", "")
         )
-        self.model = "claude-3-5-sonnet-20241022"
+        self.model = "claude-haiku-4-5-20251001"
         self.max_content_length = 50000  # Max characters per scan
 
         # Threat detection patterns
