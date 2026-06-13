@@ -610,3 +610,27 @@ It can be used as a building block for:
 - Liability Evidence
 
 This repository treats Agent Action Atom as an external control material and minimal record unit for agent security, boundary control, and audit flows.
+
+## Tool Permission Policy Builder
+
+Tool Permission Policy Builder is a free experimental stateless builder that creates external policy material for AI-agent tool and API permission decisions.
+
+It can define:
+- allowed tools
+- blocked tools
+- approval rules
+- risk boundaries
+- context state
+- Atom-compatible action reference
+
+Use this when an AI agent needs an external permission policy before using tools, reading memory, calling paid APIs, accessing network resources, or executing sensitive actions.
+
+The builder is free because it creates the policy structure only.
+
+Actual security checks, prompt injection detection, and tool risk validation remain handled by security check endpoints.
+
+Endpoint: POST /api/tool-permission-policy/build
+Pricing: free
+Type: experimental, stateless
+
+It is not a sandbox, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, and not an official standard.

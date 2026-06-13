@@ -14,6 +14,43 @@ servers:
     description: Production (Render)
 
 paths:
+  /api/tool-permission-policy/build:
+    post:
+      operationId: build_tool_permission_policy
+      summary: Build an AI-agent tool permission policy (free, stateless, experimental)
+      description: >
+        Creates external policy material for AI-agent tool and API permission decisions.
+        Defines allowed tools, blocked tools, approval rules, risk boundaries, and context state.
+        Free. No x402 payment required. Stateless. No DB storage.
+      tags: [ToolPermissionPolicy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolPermissionPolicyBuildRequest'
+            example:
+              agent_id: "agent-demo-001"
+              policy_name: "demo-tool-policy"
+      responses:
+        "200":
+          description: Tool permission policy created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolPermissionPolicyBuildResponse'
+              example:
+                permission_policy_id: "tool_permission_policy_<uuid>"
+                policy_type: "agent_tool_permission_policy"
+                status: "created"
+                experimental: true
+                stateless: true
+                free_builder: true
+                agent_id: "agent-demo-001"
+                allowed_tools: ["read_only_checks", "openapi_read", "budget_check", "payment_evidence_check"]
+                blocked_tools: ["wallet_execution", "private_key_access", "unknown_tool_scope"]
+                can_feed_into: ["Agent Spending Policy", "Budget Check", "Agent Action Atom", "Tool Permission Boundary"]
+
   /api/security/scan:
     post:
       operationId: scan_security
@@ -533,4 +570,126 @@ components:
           type: string
           example: "0x60c402878EfcEcAe5733A88075328Aa2320C39BE"
         endpoint:
+          type: string
+
+  ToolPermissionPolicyBuildRequest:
+    type: object
+    required: [agent_id]
+    properties:
+      agent_id:
+        type: string
+      policy_name:
+        type: string
+      allowed_tools:
+        type: array
+        items:
+          type: string
+        default: ["read_only_checks", "openapi_read", "budget_check", "payment_evidence_check"]
+      blocked_tools:
+        type: array
+        items:
+          type: string
+        default: ["wallet_execution", "private_key_access", "unknown_tool_scope", "unverified_external_url", "memory_write_without_review"]
+      approval_rules:
+        type: object
+        properties:
+          human_approval_required_for_payment:
+            type: boolean
+            default: true
+          human_approval_required_for_new_tool:
+            type: boolean
+            default: true
+          human_approval_required_for_memory_write:
+            type: boolean
+            default: true
+          block_if_prompt_injection_detected:
+            type: boolean
+            default: true
+          block_if_tool_scope_unknown:
+            type: boolean
+            default: true
+      risk_boundaries:
+        type: object
+        properties:
+          max_tool_calls_per_decision:
+            type: integer
+            default: 3
+          allow_network_access:
+            type: boolean
+            default: false
+          allow_payment_execution:
+            type: boolean
+            default: false
+          allow_read_only_checks:
+            type: boolean
+            default: true
+          allow_memory_read:
+            type: boolean
+            default: true
+          allow_memory_write:
+            type: boolean
+            default: false
+      context_state:
+        type: object
+        properties:
+          status:
+            type: string
+            default: "current"
+          use_rule:
+            type: string
+          evidence:
+            type: string
+          last_checked:
+            type: string
+
+  ToolPermissionPolicyBuildResponse:
+    type: object
+    properties:
+      permission_policy_id:
+        type: string
+        example: "tool_permission_policy_<uuid>"
+      policy_type:
+        type: string
+        example: "agent_tool_permission_policy"
+      status:
+        type: string
+        example: "created"
+      experimental:
+        type: boolean
+        example: true
+      stateless:
+        type: boolean
+        example: true
+      free_builder:
+        type: boolean
+        example: true
+      agent_id:
+        type: string
+      policy_name:
+        type: string
+      allowed_tools:
+        type: array
+        items:
+          type: string
+      blocked_tools:
+        type: array
+        items:
+          type: string
+      approval_rules:
+        type: object
+      risk_boundaries:
+        type: object
+      context_state:
+        type: object
+      agent_action_atom:
+        type: object
+      can_feed_into:
+        type: array
+        items:
+          type: string
+      created_at:
+        type: string
+      non_goals:
+        type: array
+        items:
           type: string

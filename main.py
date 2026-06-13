@@ -6,6 +6,7 @@ FastAPI server with x402 payment protocol for AI security scanning and threat de
 """
 
 import os
+import uuid
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -2111,6 +2112,167 @@ async def quota_check(payload: QuotaCheckRequest, http_request: Request):
         "reasons": reasons,
         "recommended_action": action_map[decision],
         "primitive": "quota-check",
+    }
+
+
+# ============================================================
+# Tool Permission Policy Builder v0.1 (free / stateless / experimental)
+# ============================================================
+
+class ToolPermissionApprovalRulesInput(BaseModel):
+    human_approval_required_for_payment: Optional[bool] = Field(default=True)
+    human_approval_required_for_new_tool: Optional[bool] = Field(default=True)
+    human_approval_required_for_memory_write: Optional[bool] = Field(default=True)
+    block_if_prompt_injection_detected: Optional[bool] = Field(default=True)
+    block_if_tool_scope_unknown: Optional[bool] = Field(default=True)
+
+class ToolPermissionRiskBoundariesInput(BaseModel):
+    max_tool_calls_per_decision: Optional[int] = Field(default=3)
+    allow_network_access: Optional[bool] = Field(default=False)
+    allow_payment_execution: Optional[bool] = Field(default=False)
+    allow_read_only_checks: Optional[bool] = Field(default=True)
+    allow_memory_read: Optional[bool] = Field(default=True)
+    allow_memory_write: Optional[bool] = Field(default=False)
+
+class ToolPermissionContextStateInput(BaseModel):
+    status: Optional[str] = Field(default="current")
+    use_rule: Optional[str] = Field(default=None)
+    evidence: Optional[str] = Field(default=None)
+    last_checked: Optional[str] = Field(default=None)
+
+class ToolPermissionPolicyBuildRequest(BaseModel):
+    agent_id: str
+    policy_name: Optional[str] = Field(default=None)
+    allowed_tools: Optional[List[str]] = Field(default=None)
+    blocked_tools: Optional[List[str]] = Field(default=None)
+    approval_rules: Optional[ToolPermissionApprovalRulesInput] = Field(default=None)
+    risk_boundaries: Optional[ToolPermissionRiskBoundariesInput] = Field(default=None)
+    context_state: Optional[ToolPermissionContextStateInput] = Field(default=None)
+
+@app.post("/api/tool-permission-policy/build", include_in_schema=True)
+async def build_tool_permission_policy(req: ToolPermissionPolicyBuildRequest):
+    """Build an AI-agent tool permission policy. Free, stateless, experimental."""
+    permission_policy_id = f"tool_permission_policy_{uuid.uuid4()}"
+    created_at = datetime.utcnow().isoformat() + "Z"
+
+    allowed_tools = req.allowed_tools if req.allowed_tools is not None else [
+        "read_only_checks", "openapi_read", "budget_check", "payment_evidence_check"
+    ]
+    blocked_tools = req.blocked_tools if req.blocked_tools is not None else [
+        "wallet_execution", "private_key_access", "unknown_tool_scope",
+        "unverified_external_url", "memory_write_without_review"
+    ]
+    approval_rules = req.approval_rules or ToolPermissionApprovalRulesInput()
+    risk_boundaries = req.risk_boundaries or ToolPermissionRiskBoundariesInput()
+    context_state = req.context_state or ToolPermissionContextStateInput()
+
+    return {
+        "permission_policy_id": permission_policy_id,
+        "policy_type": "agent_tool_permission_policy",
+        "status": "created",
+        "experimental": True,
+        "stateless": True,
+        "free_builder": True,
+        "agent_id": req.agent_id,
+        "policy_name": req.policy_name,
+        "allowed_tools": allowed_tools,
+        "blocked_tools": blocked_tools,
+        "approval_rules": approval_rules.model_dump(),
+        "risk_boundaries": risk_boundaries.model_dump(),
+        "context_state": context_state.model_dump(),
+        "agent_action_atom": {
+            "atom_type": "tool_permission_policy_created",
+            "action_type": "permission_policy_build",
+            "target": "agent_tool_permissions",
+            "audit_ready": True,
+            "includes": [
+                "allowed_tools",
+                "blocked_tools",
+                "approval_rules",
+                "risk_boundaries",
+                "context_state"
+            ],
+            "note": "Atom-compatible reference. This builder does not call the external Action Atom Builder."
+        },
+        "can_feed_into": [
+            "Agent Spending Policy",
+            "Budget Check",
+            "Agent Action Atom",
+            "Agent Payment Action Record",
+            "Payment Control Evidence Packet",
+            "Decision Cost Trace",
+            "Tool Permission Boundary"
+        ],
+        "created_at": created_at,
+        "non_goals": [
+            "not a sandbox",
+            "not a model provider",
+            "not a wallet",
+            "not a payment protocol",
+            "not a settlement layer",
+            "not a legal compliance system",
+            "not an official standard"
+        ]
+    }
+
+
+@app.get("/.well-known/agent.json", include_in_schema=False)
+async def agent_json():
+    """AI-agent discovery metadata."""
+    return {
+        "name": "Agent Security Gateway",
+        "version": "1.0.0",
+        "description": "Pay-per-request security APIs for autonomous AI agents. Detect prompt injection, validate content, scan threats, and enforce tool permission policies.",
+        "capabilities": [
+            {
+                "name": "Security Scanner",
+                "endpoint": "POST /api/security/scan",
+                "type": "paid",
+                "pricing": "0.05 USDC",
+                "x402_required": True,
+                "purpose": "Scan text for Japanese prompt injection, hidden instructions, and threats before external API calls."
+            },
+            {
+                "name": "Metadata Sanitizer",
+                "endpoint": "POST /api/security/metadata-sanitize",
+                "type": "paid",
+                "pricing": "0.05 USDC",
+                "x402_required": True,
+                "purpose": "Sanitize payment metadata before x402 or stablecoin payment execution."
+            },
+            {
+                "name": "Tool Permission Policy Builder",
+                "endpoint": "POST /api/tool-permission-policy/build",
+                "type": "experimental_stateless_builder",
+                "pricing": "free",
+                "x402_required": False,
+                "purpose": "Creates external policy material for AI-agent tool and API permission decisions, including allowed tools, blocked tools, approval rules, risk boundaries, context state, and Atom-compatible reference.",
+                "use_when": [
+                    "an AI agent needs tool permission rules before using external APIs",
+                    "an AI agent needs boundaries before reading memory or accessing network resources",
+                    "a developer needs external permission material for AI-agent tool use",
+                    "a system needs a policy that can feed into Spending Policy, Budget Check, Agent Action Atom, Payment Action Record, and Evidence Packet workflows"
+                ],
+                "can_feed_into": [
+                    "Agent Spending Policy",
+                    "Budget Check",
+                    "Agent Action Atom",
+                    "Agent Payment Action Record",
+                    "Payment Control Evidence Packet",
+                    "Decision Cost Trace",
+                    "Tool Permission Boundary"
+                ],
+                "non_goals": [
+                    "not a sandbox",
+                    "not a model provider",
+                    "not a wallet",
+                    "not a payment protocol",
+                    "not a settlement layer",
+                    "not a legal compliance system",
+                    "not an official standard"
+                ]
+            }
+        ]
     }
 
 

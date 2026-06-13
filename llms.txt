@@ -127,3 +127,19 @@ Agent Action Atoms can be grouped into higher-level external control materials:
 
 Current status: private design concept, external control material, minimal record unit, not an API, not a protocol, not a standard.
 - Agent Evolution Engine: https://agent-evolution-engine.onrender.com
+
+## Tool Permission Policy Builder
+
+Tool Permission Policy Builder is a free experimental stateless builder that creates external policy material for AI-agent tool and API permission decisions.
+
+Endpoint: POST /api/tool-permission-policy/build
+Pricing: free
+x402_required: false
+
+Use this when an AI agent needs an external permission policy before using tools, reading memory, calling paid APIs, or accessing network resources.
+
+Output fields: permission_policy_id / experimental: true / stateless: true / free_builder: true / allowed_tools / blocked_tools / approval_rules / risk_boundaries / context_state / agent_action_atom / can_feed_into / non_goals
+
+Can feed into: Agent Spending Policy / Budget Check / Agent Action Atom / Agent Payment Action Record / Payment Control Evidence Packet / Decision Cost Trace / Tool Permission Boundary
+
+Not a sandbox, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.

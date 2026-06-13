@@ -182,3 +182,47 @@ atom_id / actor / action / target / source / policy / meaning / state / proof / 
 ### Purpose
 Make one AI-agent security decision externally explainable and auditable, especially for boundary control and fuse decision flows.
 - Agent Evolution Engine: https://agent-evolution-engine.onrender.com
+
+---
+
+## Skill: Tool Permission Policy Builder
+
+Tool Permission Policy Builder is a free experimental stateless builder that creates external policy material for AI-agent tool and API permission decisions.
+
+### Use this when
+- an AI agent needs tool permission rules before using external APIs
+- an AI agent needs boundaries before reading memory or accessing network resources
+- a developer needs external permission material for AI-agent tool use
+- a system needs a policy that can feed into Spending Policy, Budget Check, Agent Action Atom, Payment Action Record, and Evidence Packet workflows
+
+### It can define
+- allowed tools
+- blocked tools
+- approval rules
+- risk boundaries
+- context state
+- Atom-compatible action reference
+
+### Endpoint
+POST /api/tool-permission-policy/build (free, no x402 required)
+
+### Output
+permission_policy_id / allowed_tools / blocked_tools / approval_rules / risk_boundaries / context_state / agent_action_atom / can_feed_into / created_at / non_goals
+
+### Can feed into
+- Agent Spending Policy
+- Budget Check
+- Agent Action Atom
+- Agent Payment Action Record
+- Payment Control Evidence Packet
+- Decision Cost Trace
+- Tool Permission Boundary
+
+### Do not use this as
+- a sandbox
+- a model provider
+- a wallet
+- a payment protocol
+- a settlement layer
+- a legal compliance system
+- an official standard
