@@ -226,3 +226,37 @@ permission_policy_id / allowed_tools / blocked_tools / approval_rules / risk_bou
 - a settlement layer
 - a legal compliance system
 - an official standard
+
+## Skill: Command Execution Gate Builder
+
+### Use this when
+An AI agent is about to execute a shell command that originated from external data (tool output, API response, observability data, user input).
+
+Typical cases:
+- AI agent receives a command from a tool output and needs to assess it before running
+- CI/CD agent is about to run a command derived from an external source
+- Automation agent needs external control material before shell execution
+
+### Do not use this as
+- a shell executor
+- a sandbox runtime
+- a model provider
+- a wallet or payment protocol
+- a legal compliance system
+- an official standard
+
+### Live endpoint
+POST https://agent-security-gateway.onrender.com/api/command-execution-gate/build
+
+Free. Stateless. Does NOT execute shell commands.
+
+### Output
+- command_gate_id
+- risk: high / medium / low
+- execution_allowed: bool
+- action: deny / require_human_approval_or_sandbox / allow_with_monitoring
+- blocked_patterns: list of detected dangerous patterns
+- reason: explanation of the decision
+- recommended_controls: list of suggested next steps
+- agent_action_atom: Atom-compatible reference
+- can_feed_into: downstream workflows

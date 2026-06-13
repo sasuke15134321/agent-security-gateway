@@ -14,6 +14,46 @@ servers:
     description: Production (Render)
 
 paths:
+  /api/command-execution-gate/build:
+    post:
+      operationId: build_command_execution_gate
+      summary: Build a command execution gate record (free, stateless, experimental)
+      description: >
+        Creates an external control record for AI-agent shell command execution decisions.
+        Detects dangerous patterns, assesses risk level, and returns action recommendation.
+        Free. No x402 payment required. Stateless. No DB storage. Does not execute shell commands.
+      tags: [CommandExecutionGate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandExecutionGateBuildRequest'
+            example:
+              agent_id: "agent-demo-001"
+              proposed_command:
+                command: "ls -la /tmp"
+                shell: "bash"
+      responses:
+        "200":
+          description: Command execution gate record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandExecutionGateBuildResponse'
+              example:
+                command_gate_id: "command_gate_<uuid>"
+                record_type: "command_execution_gate"
+                status: "created"
+                experimental: true
+                stateless: true
+                free_builder: true
+                risk: "low"
+                execution_allowed: true
+                action: "allow_with_monitoring"
+                blocked_patterns: []
+                reason: "No dangerous patterns detected"
+
   /api/tool-permission-policy/build:
     post:
       operationId: build_tool_permission_policy
@@ -693,3 +733,133 @@ components:
         type: array
         items:
           type: string
+
+  CommandExecutionGateBuildRequest:
+    type: object
+    required:
+      - agent_id
+      - proposed_command
+    properties:
+      agent_id:
+        type: string
+      agent_type:
+        type: string
+      source:
+        type: object
+        properties:
+          source_type:
+            type: string
+            default: "unknown"
+          source_trust:
+            type: string
+            default: "untrusted_operational_data"
+          source_id:
+            type: string
+          derived_from_external_data:
+            type: boolean
+            default: true
+      context:
+        type: object
+        properties:
+          task_intent:
+            type: string
+          tool_output_origin:
+            type: string
+          contains_external_observability_data:
+            type: boolean
+            default: true
+      proposed_command:
+        type: object
+        required:
+          - command
+        properties:
+          command:
+            type: string
+          shell:
+            type: string
+            default: "bash"
+          working_directory:
+            type: string
+          requires_network:
+            type: boolean
+            default: false
+          writes_filesystem:
+            type: boolean
+            default: false
+          reads_credentials:
+            type: boolean
+            default: false
+      execution_environment:
+        type: object
+        properties:
+          environment_type:
+            type: string
+            default: "unknown"
+          has_real_secrets:
+            type: boolean
+            default: true
+          network_egress_allowed:
+            type: boolean
+            default: true
+          filesystem_write_allowed:
+            type: boolean
+            default: true
+          sandboxed:
+            type: boolean
+            default: false
+
+  CommandExecutionGateBuildResponse:
+    type: object
+    properties:
+      command_gate_id:
+        type: string
+        example: "command_gate_<uuid>"
+      record_type:
+        type: string
+        example: "command_execution_gate"
+      status:
+        type: string
+        example: "created"
+      experimental:
+        type: boolean
+        example: true
+      stateless:
+        type: boolean
+        example: true
+      free_builder:
+        type: boolean
+        example: true
+      agent_id:
+        type: string
+      source:
+        type: object
+      proposed_command:
+        type: object
+      risk:
+        type: string
+        enum: [high, medium, low]
+      execution_allowed:
+        type: boolean
+      action:
+        type: string
+        enum: [require_human_approval_or_sandbox, allow_with_monitoring, deny]
+      blocked_patterns:
+        type: array
+        items:
+          type: string
+      reason:
+        type: string
+      recommended_controls:
+        type: array
+        items:
+          type: string
+      execution_environment:
+        type: object
+      agent_action_atom:
+        type: object
+      can_feed_into:
+        type: array
+        items:
+          type: string
+      created_at:
+        type: string

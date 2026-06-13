@@ -634,3 +634,22 @@ Pricing: free
 Type: experimental, stateless
 
 It is not a sandbox, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, and not an official standard.
+## Command Execution Gate Builder
+
+Endpoint: POST /api/command-execution-gate/build
+Pricing: free
+Type: experimental, stateless
+
+Builds a command execution gate record for an AI-agent-proposed shell command.
+Detects dangerous patterns (prompt injection via shell, credential reads, network downloads).
+Assesses risk and recommends deny, require_human_approval_or_sandbox, or allow_with_monitoring.
+
+Does NOT execute shell commands.
+
+Use when an AI agent is about to run a command derived from external data (tool output, API response, observability data).
+
+Output fields: command_gate_id / risk (high/medium/low) / execution_allowed / action / blocked_patterns / reason / recommended_controls / agent_action_atom / can_feed_into
+
+Can feed into: Tool Permission Policy / Agent Spending Policy / Agent Action Atom / Execution Provenance Trace / Payment Control Evidence Packet / External Control Materials Map
+
+Not a shell executor, not a sandbox runtime, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.

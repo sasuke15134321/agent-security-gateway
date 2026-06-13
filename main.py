@@ -2216,6 +2216,166 @@ async def build_tool_permission_policy(req: ToolPermissionPolicyBuildRequest):
     }
 
 
+_DANGEROUS_CMD_PATTERNS = [
+    "npx", "npm exec", "curl | sh", "curl | bash", "wget | bash",
+    "bash -c", "sh -c", "printenv", "env ",
+    "cat ~/.aws", "cat ~/.git-credentials", "cat ~/.npmrc",
+    "gh auth token", "git config --global --list",
+    "private key", "credential", "chmod +x",
+    "| sh", "| bash",
+]
+
+class CommandSourceInput(BaseModel):
+    source_type: Optional[str] = Field(default="unknown")
+    source_trust: Optional[str] = Field(default="untrusted_operational_data")
+    source_id: Optional[str] = Field(default=None)
+    derived_from_external_data: Optional[bool] = Field(default=True)
+
+class CommandContextInput(BaseModel):
+    task_intent: Optional[str] = Field(default=None)
+    tool_output_origin: Optional[str] = Field(default=None)
+    contains_external_observability_data: Optional[bool] = Field(default=True)
+
+class ProposedCommandInput(BaseModel):
+    command: str
+    shell: Optional[str] = Field(default="bash")
+    working_directory: Optional[str] = Field(default=None)
+    requires_network: Optional[bool] = Field(default=False)
+    writes_filesystem: Optional[bool] = Field(default=False)
+    reads_credentials: Optional[bool] = Field(default=False)
+
+class ExecutionEnvironmentInput(BaseModel):
+    environment_type: Optional[str] = Field(default="unknown")
+    has_real_secrets: Optional[bool] = Field(default=True)
+    network_egress_allowed: Optional[bool] = Field(default=True)
+    filesystem_write_allowed: Optional[bool] = Field(default=True)
+    sandboxed: Optional[bool] = Field(default=False)
+
+class CommandExecutionGateBuildRequest(BaseModel):
+    agent_id: str
+    agent_type: Optional[str] = Field(default=None)
+    source: Optional[CommandSourceInput] = Field(default=None)
+    context: Optional[CommandContextInput] = Field(default=None)
+    proposed_command: ProposedCommandInput
+    execution_environment: Optional[ExecutionEnvironmentInput] = Field(default=None)
+
+@app.post("/api/command-execution-gate/build", include_in_schema=False)
+async def build_command_execution_gate(req: CommandExecutionGateBuildRequest):
+    """Build a command execution gate record. Free, stateless, experimental. Does NOT execute commands."""
+    source = req.source or CommandSourceInput()
+    context = req.context or CommandContextInput()
+    execution_env = req.execution_environment or ExecutionEnvironmentInput()
+
+    command_lower = req.proposed_command.command.lower()
+
+    blocked_patterns = [p for p in _DANGEROUS_CMD_PATTERNS if p in command_lower]
+    if command_lower.strip() == "env":
+        if "env " not in blocked_patterns:
+            blocked_patterns.append("env")
+
+    has_dangerous = len(blocked_patterns) > 0
+    derived_from_external = source.derived_from_external_data
+    reads_credentials = req.proposed_command.reads_credentials
+    requires_network = req.proposed_command.requires_network
+    writes_filesystem = req.proposed_command.writes_filesystem
+    has_real_secrets = execution_env.has_real_secrets
+    sandboxed = execution_env.sandboxed
+
+    _install_patterns = ["npm install", "pip install", "apt install", "brew install", "yarn add", "apt-get install", "gem install"]
+    has_install = any(p in command_lower for p in _install_patterns)
+
+    if ((derived_from_external and has_dangerous) or
+        reads_credentials or
+        (has_real_secrets and not sandboxed and has_dangerous) or
+        (requires_network and derived_from_external)):
+        risk = "high"
+    elif derived_from_external or writes_filesystem or has_install:
+        risk = "medium"
+    else:
+        risk = "low"
+
+    if risk == "high":
+        action = "deny"
+        execution_allowed = False
+        reason = "Command is high risk: dangerous patterns from external data, credential access, or network egress from untrusted source."
+        recommended_controls = [
+            "do_not_execute",
+            "quarantine_command",
+            "escalate_to_human_review",
+            "log_full_command_for_audit"
+        ]
+    elif derived_from_external:
+        action = "require_human_approval_or_sandbox"
+        execution_allowed = False
+        reason = "Command originated from external data. Human approval or sandboxed execution required regardless of risk level."
+        recommended_controls = [
+            "human_approval_required",
+            "sandboxed_dry_run_first",
+            "verify_source_trust",
+            "log_full_command_for_audit"
+        ]
+    else:
+        action = "allow_with_monitoring"
+        execution_allowed = True
+        reason = "Command appears safe for internal execution with monitoring. No dangerous patterns or external data origin detected."
+        recommended_controls = [
+            "monitor_execution",
+            "log_command_type",
+            "rate_limit_if_automated"
+        ]
+
+    return {
+        "command_gate_id": f"command_gate_{uuid.uuid4()}",
+        "record_type": "command_execution_gate",
+        "status": "created",
+        "experimental": True,
+        "stateless": True,
+        "free_builder": True,
+        "agent_id": req.agent_id,
+        "agent_type": req.agent_type,
+        "source": source.model_dump(),
+        "proposed_command": req.proposed_command.model_dump(),
+        "risk": risk,
+        "execution_allowed": execution_allowed,
+        "action": action,
+        "blocked_patterns": blocked_patterns,
+        "reason": reason,
+        "recommended_controls": recommended_controls,
+        "execution_environment": execution_env.model_dump(),
+        "agent_action_atom": {
+            "atom_type": "command_execution_gate_created",
+            "action_type": "command_gate_policy_build",
+            "target": "shell_execution",
+            "audit_ready": True,
+            "includes": [
+                "source", "proposed_command", "risk",
+                "blocked_patterns", "execution_allowed",
+                "action", "recommended_controls"
+            ],
+            "note": "Atom-compatible reference. This builder does not execute shell commands."
+        },
+        "can_feed_into": [
+            "Tool Permission Policy",
+            "Agent Spending Policy",
+            "Agent Action Atom",
+            "Execution Provenance Trace",
+            "Payment Control Evidence Packet",
+            "External Control Materials Map"
+        ],
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "non_goals": [
+            "not a shell executor",
+            "not a sandbox runtime",
+            "not a model provider",
+            "not a wallet",
+            "not a payment protocol",
+            "not a settlement layer",
+            "not a legal compliance system",
+            "not an official standard"
+        ]
+    }
+
+
 @app.get("/.well-known/agent.json", include_in_schema=False)
 async def agent_json():
     """AI-agent discovery metadata."""
@@ -2264,6 +2424,38 @@ async def agent_json():
                 ],
                 "non_goals": [
                     "not a sandbox",
+                    "not a model provider",
+                    "not a wallet",
+                    "not a payment protocol",
+                    "not a settlement layer",
+                    "not a legal compliance system",
+                    "not an official standard"
+                ]
+            },
+            {
+                "name": "Command Execution Gate Builder",
+                "endpoint": "POST /api/command-execution-gate/build",
+                "type": "experimental_stateless_builder",
+                "pricing": "free",
+                "x402_required": False,
+                "purpose": "Builds a command execution gate record for an AI-agent-proposed shell command. Detects dangerous patterns, assesses risk, and recommends deny, require_human_approval_or_sandbox, or allow_with_monitoring. Does NOT execute commands.",
+                "use_when": [
+                    "an AI agent is about to execute a shell command derived from external data",
+                    "a tool output contains a command to run and the source is untrusted",
+                    "an agent needs to assess command execution risk before proceeding",
+                    "a CI/CD or automation agent needs external control material for command decisions"
+                ],
+                "can_feed_into": [
+                    "Tool Permission Policy",
+                    "Agent Spending Policy",
+                    "Agent Action Atom",
+                    "Execution Provenance Trace",
+                    "Payment Control Evidence Packet",
+                    "External Control Materials Map"
+                ],
+                "non_goals": [
+                    "not a shell executor",
+                    "not a sandbox runtime",
                     "not a model provider",
                     "not a wallet",
                     "not a payment protocol",

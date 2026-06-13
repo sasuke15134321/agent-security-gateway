@@ -143,3 +143,22 @@ Output fields: permission_policy_id / experimental: true / stateless: true / fre
 Can feed into: Agent Spending Policy / Budget Check / Agent Action Atom / Agent Payment Action Record / Payment Control Evidence Packet / Decision Cost Trace / Tool Permission Boundary
 
 Not a sandbox, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.
+
+## Command Execution Gate Builder
+
+Endpoint: POST /api/command-execution-gate/build
+Pricing: free
+Type: experimental, stateless
+
+Builds a command execution gate record for a proposed shell command.
+Detects dangerous patterns: npx / curl | bash / bash -c / env / printenv / cat ~/.aws / gh auth token / chmod +x and similar.
+Risk levels: high / medium / low.
+Actions: deny / require_human_approval_or_sandbox / allow_with_monitoring.
+
+Does NOT execute shell commands.
+
+Output fields: command_gate_id / risk / execution_allowed / action / blocked_patterns / reason / recommended_controls / agent_action_atom / can_feed_into
+
+Can feed into: Tool Permission Policy / Agent Spending Policy / Agent Action Atom / Execution Provenance Trace / Payment Control Evidence Packet / External Control Materials Map
+
+Not a shell executor, not a sandbox runtime, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.
