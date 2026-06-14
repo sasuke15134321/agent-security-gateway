@@ -376,6 +376,37 @@ paths:
         '200':
           description: Service health status
 
+  /api/tool-approval/check:
+    post:
+      summary: Agent Tool Approval Check
+      description: >
+        Free/stateless runtime approval decision for AI-agent tool use.
+        Returns allow, deny, or review_required.
+        Does not execute tools, shell commands, or modify files.
+        Not in x402 manifest.
+      tags: [ToolApproval]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, tool_name]
+              properties:
+                agent_id:
+                  type: string
+                tool_name:
+                  type: string
+                tool_input:
+                  type: object
+                user_id:
+                  type: string
+                session_id:
+                  type: string
+      responses:
+        '200':
+          description: Tool approval decision
+
 components:
   securitySchemes:
     x402Payment:

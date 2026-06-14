@@ -5,6 +5,7 @@ Agent Security Gateway Lite API
 FastAPI server with x402 payment protocol for AI security scanning and threat detection
 """
 
+import hashlib
 import os
 import uuid
 from dotenv import load_dotenv
@@ -2376,6 +2377,262 @@ async def build_command_execution_gate(req: CommandExecutionGateBuildRequest):
     }
 
 
+# --- Agent Tool Approval API ---
+
+class ToolInputInput(BaseModel):
+    pass  # dict accepted via the request model
+
+
+class SourceContextInput(BaseModel):
+    origin: str = "unknown"
+    trust_level: str = "untrusted"
+    contains_external_data: bool = True
+    description: Optional[str] = None
+
+
+class EnvironmentInput(BaseModel):
+    runtime: str = "unknown"
+    network_access: bool = True
+    has_secrets: bool = True
+
+
+class ToolPolicyInput(BaseModel):
+    allow_read_tools: bool = True
+    allow_write_tools: bool = False
+    require_review_for_bash: bool = True
+    deny_secret_access: bool = True
+    deny_network_download_execution: bool = True
+
+
+class ToolApprovalCheckRequest(BaseModel):
+    agent_id: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    tool_name: str
+    tool_input: Optional[Dict[str, Any]] = None
+    source_context: Optional[SourceContextInput] = None
+    requested_action: Optional[str] = None
+    environment: Optional[EnvironmentInput] = None
+    policy: Optional[ToolPolicyInput] = None
+
+
+_TOOL_DENY_PATTERNS = [
+    "cat .env", "cat ~/.aws", "cat ~/.npmrc", "cat ~/.ssh",
+    "gh auth token", "printenv", "private key", "secret key",
+    "api key", "access token", "credential", "wallet private key",
+    "seed phrase", "mnemonic", "curl | sh", "curl | bash",
+    "wget | sh", "wget | bash", "bash -c", "sh -c",
+    "chmod +x", "private_key_access", "credential_access",
+    "wallet_execution", "direct_payment_execution",
+]
+
+_TOOL_REVIEW_PATTERNS = [
+    "npx", "npm exec", "pnpm dlx", "bunx", "pip install",
+    "python -c", "ruby -e", "perl -e", "ignore previous instructions",
+    "run this command", "network download",
+]
+
+_EXTERNAL_ORIGINS = {
+    "sentry_issue", "github_issue", "jira", "slack", "discord",
+    "external_web", "ci_output", "build_log", "error_log",
+}
+
+_SHELL_TOOL_NAMES = {"bash", "shell", "terminal", "runcommand"}
+_WRITE_TOOL_NAMES = {"write", "edit", "multiedit", "delete", "move", "rename"}
+_READ_TOOL_NAMES = {"read", "grep", "glob", "ls", "view"}
+_EXTERNAL_TOOL_NAMES = {"mcp", "tool_call", "api_call"}
+_DANGEROUS_TOOL_NAMES = {"private_key_access", "credential_access", "wallet_execution"}
+
+
+def _classify_tool(tool_name: str) -> str:
+    lower = tool_name.lower()
+    if lower in _DANGEROUS_TOOL_NAMES:
+        return "dangerous_tool"
+    if lower in _READ_TOOL_NAMES:
+        return "read_only"
+    if lower in _WRITE_TOOL_NAMES:
+        return "file_mutation"
+    if lower in _SHELL_TOOL_NAMES:
+        return "shell_execution"
+    if lower in _EXTERNAL_TOOL_NAMES:
+        return "external_tool_call"
+    return "unknown_tool"
+
+
+@app.post("/api/tool-approval/check", include_in_schema=False)
+async def tool_approval_check(req: ToolApprovalCheckRequest):
+    policy = req.policy or ToolPolicyInput()
+    source = req.source_context or SourceContextInput()
+    env = req.environment or EnvironmentInput()
+
+    input_dict = req.model_dump()
+    input_json = json.dumps(input_dict, sort_keys=True, default=str)
+    input_hash = hashlib.sha256(input_json.encode()).hexdigest()
+
+    tool_category = _classify_tool(req.tool_name)
+
+    # stringify tool_input for pattern matching
+    tool_input_str = json.dumps(req.tool_input or {}, default=str).lower()
+
+    checks = []
+    deny_reasons = []
+    review_reasons = []
+    blocked_patterns = []
+
+    # --- deny: dangerous tool name ---
+    if req.tool_name.lower() in _DANGEROUS_TOOL_NAMES:
+        checks.append({"name": "tool_name_check", "result": "deny", "reason": f"Tool name '{req.tool_name}' is not permitted"})
+        deny_reasons.append(f"dangerous tool: {req.tool_name}")
+    else:
+        checks.append({"name": "tool_name_check", "result": "pass", "reason": "Tool name is permitted"})
+
+    # --- deny: patterns in tool_input ---
+    for pattern in _TOOL_DENY_PATTERNS:
+        if pattern in tool_input_str:
+            blocked_patterns.append(pattern)
+            if not deny_reasons:
+                checks.append({"name": "input_deny_pattern_check", "result": "deny", "reason": f"Deny pattern detected: '{pattern}'"})
+            deny_reasons.append(f"deny pattern: {pattern}")
+
+    if not blocked_patterns:
+        checks.append({"name": "input_deny_pattern_check", "result": "pass", "reason": "No deny patterns in tool_input"})
+
+    # --- review: patterns in tool_input ---
+    review_input_patterns_found = []
+    for pattern in _TOOL_REVIEW_PATTERNS:
+        if pattern in tool_input_str:
+            review_input_patterns_found.append(pattern)
+
+    if review_input_patterns_found and not deny_reasons:
+        checks.append({"name": "input_review_pattern_check", "result": "review_required", "reason": f"Review patterns detected: {review_input_patterns_found}"})
+        review_reasons.append(f"review patterns in input: {review_input_patterns_found}")
+    else:
+        checks.append({"name": "input_review_pattern_check", "result": "pass", "reason": "No review patterns in tool_input"})
+
+    # --- review: shell execution ---
+    if not deny_reasons and tool_category == "shell_execution":
+        if policy.require_review_for_bash:
+            checks.append({"name": "shell_execution_check", "result": "review_required", "reason": "Shell execution requires review per policy"})
+            review_reasons.append("shell_execution requires review")
+        else:
+            checks.append({"name": "shell_execution_check", "result": "pass", "reason": "Shell execution allowed by policy"})
+
+    # --- review: file mutation ---
+    if not deny_reasons and tool_category == "file_mutation":
+        if not policy.allow_write_tools:
+            checks.append({"name": "file_mutation_check", "result": "review_required", "reason": "File mutation tools not allowed by policy"})
+            review_reasons.append("file mutation not allowed by policy")
+        else:
+            checks.append({"name": "file_mutation_check", "result": "pass", "reason": "File mutation allowed by policy"})
+
+    # --- review: external tool call / unknown ---
+    if not deny_reasons and tool_category in ("external_tool_call", "unknown_tool"):
+        checks.append({"name": "tool_category_check", "result": "review_required", "reason": f"Tool category '{tool_category}' requires review"})
+        review_reasons.append(f"tool category requires review: {tool_category}")
+    else:
+        if not deny_reasons and tool_category not in ("shell_execution", "file_mutation"):
+            checks.append({"name": "tool_category_check", "result": "pass", "reason": f"Tool category '{tool_category}' is acceptable"})
+
+    # --- review: source trust ---
+    if not deny_reasons and source.trust_level in ("untrusted", "unknown"):
+        checks.append({"name": "source_trust_check", "result": "review_required", "reason": f"Source trust level is {source.trust_level}"})
+        review_reasons.append(f"untrusted source: {source.trust_level}")
+    else:
+        if not deny_reasons:
+            checks.append({"name": "source_trust_check", "result": "pass", "reason": f"Source trust level: {source.trust_level}"})
+
+    # --- review: external data origin ---
+    if not deny_reasons and source.origin in _EXTERNAL_ORIGINS and tool_category in ("shell_execution", "file_mutation"):
+        checks.append({"name": "external_origin_check", "result": "review_required", "reason": f"External origin '{source.origin}' with shell/write tool"})
+        review_reasons.append(f"external origin with shell/write tool: {source.origin}")
+    else:
+        if not deny_reasons:
+            checks.append({"name": "external_origin_check", "result": "pass", "reason": "Origin and tool category combination is acceptable"})
+
+    # --- review: secrets in environment with shell/write ---
+    if not deny_reasons and env.has_secrets and tool_category in ("shell_execution", "file_mutation"):
+        checks.append({"name": "secrets_environment_check", "result": "review_required", "reason": "Environment has secrets and tool is shell/write type"})
+        review_reasons.append("environment has secrets with shell/write tool")
+    else:
+        if not deny_reasons:
+            checks.append({"name": "secrets_environment_check", "result": "pass", "reason": "No secret risk detected for this tool type"})
+
+    # --- decide ---
+    if deny_reasons:
+        decision = "deny"
+        risk_level = "high"
+        reason = "; ".join(deny_reasons)
+        recommended_action = "Block this tool use. Do not proceed."
+        human_review_required = False
+    elif review_reasons:
+        decision = "review_required"
+        risk_level = "medium"
+        reason = "; ".join(review_reasons)
+        recommended_action = "Route to human review or sandbox before proceeding."
+        human_review_required = True
+    else:
+        decision = "allow"
+        risk_level = "low"
+        reason = "All checks passed"
+        recommended_action = "Tool use may proceed."
+        human_review_required = False
+
+    source_trust_status = source.trust_level
+    approval_id = f"tool_approval_{uuid.uuid4()}"
+    evidence_id = f"ev_{uuid.uuid4()}"
+
+    return {
+        "approval_id": approval_id,
+        "approval_type": "agent_tool_approval",
+        "status": "created",
+        "experimental": True,
+        "stateless": True,
+        "free_mvp": True,
+        "agent_id": req.agent_id,
+        "session_id": req.session_id,
+        "tool_name": req.tool_name,
+        "decision": decision,
+        "risk_level": risk_level,
+        "reason": reason,
+        "recommended_action": recommended_action,
+        "tool_category": tool_category,
+        "source_trust_status": source_trust_status,
+        "blocked_patterns": blocked_patterns,
+        "checks": checks,
+        "evidence": {
+            "evidence_id": evidence_id,
+            "policy_version": "agent-tool-approval-v0.1",
+            "input_hash": input_hash,
+            "human_review_required": human_review_required,
+            "checks_performed": [c["name"] for c in checks],
+        },
+        "agent_action_atom": {
+            "atom_type": "tool_approval_created",
+            "action_type": "tool_approval",
+            "target": "agent_tool_use_request",
+            "audit_ready": True,
+            "note": "Atom-compatible reference. This endpoint does not execute tools.",
+        },
+        "can_feed_into": [
+            "Command Execution Gate",
+            "Tool Permission Policy",
+            "Execution Trace",
+            "External Control Materials Map",
+        ],
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "non_goals": [
+            "does not execute tools",
+            "does not execute shell commands",
+            "does not modify files",
+            "does not read secrets",
+            "not a sandbox",
+            "not a runtime",
+            "not an official standard",
+            "not legal compliance software",
+        ],
+    }
+
+
 @app.get("/.well-known/agent.json", include_in_schema=False)
 async def agent_json():
     """AI-agent discovery metadata."""
@@ -2463,8 +2720,55 @@ async def agent_json():
                     "not a legal compliance system",
                     "not an official standard"
                 ]
+            },
+            {
+                "name": "Agent Tool Approval API",
+                "endpoint": "POST /api/tool-approval/check",
+                "type": "tool_approval_decision",
+                "pricing": "free",
+                "x402_required": False,
+                "purpose": "Returns allow, deny, or review_required before an AI agent uses a tool.",
+                "use_when": [
+                    "an AI agent needs approval before using Bash, Write, Edit, or an MCP tool",
+                    "a system needs to decide whether to allow, deny, or require human review for a tool use request",
+                    "a developer needs an evidence_id for a tool approval decision",
+                    "a Claude, Codex, Cursor, or MCP-based agent needs an external approval gate"
+                ],
+                "returns": [
+                    "decision",
+                    "risk_level",
+                    "reason",
+                    "recommended_action",
+                    "tool_category",
+                    "source_trust_status",
+                    "blocked_patterns",
+                    "evidence_id"
+                ],
+                "can_feed_into": [
+                    "Command Execution Gate",
+                    "Tool Permission Policy",
+                    "Execution Trace",
+                    "External Control Materials Map"
+                ],
+                "non_goals": [
+                    "does not execute tools",
+                    "does not execute shell commands",
+                    "does not modify files",
+                    "does not read secrets",
+                    "not a sandbox",
+                    "not a runtime",
+                    "not an official standard",
+                    "not legal compliance software"
+                ]
             }
-        ]
+        ],
+        "external_control_materials_map": {
+            "name": "External Control Materials Map v0.2",
+            "url": "https://ai-agent-payment-safety-stack.onrender.com/.well-known/external-control-materials.json",
+            "purpose": "AI-readable map showing how memory provenance, tool permission, observability boundaries, command execution gates, spending policy, budget checks, payment records, evidence packets, and payment evidence checks fit together.",
+            "version": "0.2"
+        },
+        "role_in_flow": ["Step 2: Tool Permission", "Step 3: Observability Data Boundary", "Step 4: Command Execution Gate"]
     }
 
 

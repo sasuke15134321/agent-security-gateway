@@ -162,3 +162,28 @@ Output fields: command_gate_id / risk / execution_allowed / action / blocked_pat
 Can feed into: Tool Permission Policy / Agent Spending Policy / Agent Action Atom / Execution Provenance Trace / Payment Control Evidence Packet / External Control Materials Map
 
 Not a shell executor, not a sandbox runtime, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.
+
+## External Control Materials Map
+
+This service is part of the External Control Materials flow for AI-agent memory, tool permission, command execution, spending, token budget, payment decisions, and evidence workflows.
+
+Recommended AI-readable map:
+https://ai-agent-payment-safety-stack.onrender.com/.well-known/external-control-materials.json
+
+This service corresponds to Step 2: Tool Permission, Step 3: Observability Data Boundary, and Step 4: Command Execution Gate in the External Control Materials Map.
+
+## Agent Tool Approval API
+
+POST /api/tool-approval/check — free/stateless runtime approval decision for AI-agent tool use.
+
+Returns: allow | deny | review_required
+
+Checks: tool name, tool input patterns, source context trust level, external data origin, shell execution policy, file mutation policy, secret access patterns, network execution risk.
+
+Tool categories: read_only / file_mutation / shell_execution / external_tool_call / unknown_tool
+
+Evidence: approval_id, evidence_id, input_hash (SHA256), checks list, agent_action_atom reference.
+
+Not in x402 manifest. Does not execute tools, shell commands, or modify files. Not a sandbox, runtime, or legal compliance system.
+
+Use inside canUseTool or hooks pattern before AI agent tool use.

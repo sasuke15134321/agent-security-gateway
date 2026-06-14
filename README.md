@@ -653,3 +653,66 @@ Output fields: command_gate_id / risk (high/medium/low) / execution_allowed / ac
 Can feed into: Tool Permission Policy / Agent Spending Policy / Agent Action Atom / Execution Provenance Trace / Payment Control Evidence Packet / External Control Materials Map
 
 Not a shell executor, not a sandbox runtime, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.
+
+## External Control Materials Map
+
+This service is part of a broader External Control Materials flow for AI agents.
+
+Central AI-readable map:
+https://ai-agent-payment-safety-stack.onrender.com/.well-known/external-control-materials.json
+
+This service corresponds to Step 2: Tool Permission, Step 3: Observability Data Boundary, and Step 4: Command Execution Gate in the External Control Materials Map.
+
+## Agent Tool Approval API
+
+POST /api/tool-approval/check provides a runtime approval decision for AI-agent tool use.
+
+It answers one question:
+Should this AI agent be allowed to use this tool with this input?
+
+The API returns:
+- allow
+- deny
+- review_required
+
+It can review tool name, tool input, source context, trust level, external data origin, command patterns, secret access patterns, file mutation risk, and network execution risk.
+
+This MVP is free/stateless and is not included in the x402 manifest.
+
+This endpoint does not execute tools, does not execute shell commands, does not modify files, does not read secrets, and is not a sandbox, runtime, official standard, or legal compliance system.
+
+Agent Tool Approval API is a runtime approval surface for AI-agent tool use.
+It is free/stateless in this MVP because it returns an approval decision and evidence reference without storing logs or executing tools.
+Stored logs, signed approval receipts, organization policies, execution traces, reports, and team workflows may be paid or metered in future deployments.
+
+## Claude Agent SDK Integration
+
+This endpoint can be used inside AI agent permission flows.
+
+Recommended pattern:
+1. Use hooks to immediately deny or modify clearly unsafe requests.
+2. Use canUseTool to call POST /api/tool-approval/check.
+3. If decision is allow, return allow to the agent runtime.
+4. If decision is deny, return deny with the reason.
+5. If decision is review_required, ask the human user or route to sandbox.
+
+Pseudo-code:
+async function canUseTool(toolName, input, context) {
+  const result = await fetch("https://<your-service>/api/tool-approval/check", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      agent_id: "claude-code",
+      tool_name: toolName,
+      tool_input: input,
+      source_context: context.source_context,
+      user_id: context.user_id,
+      session_id: context.session_id
+    })
+  }).then(r => r.json());
+  if (result.decision === "allow") return {behavior: "allow", updatedInput: input};
+  if (result.decision === "deny") return {behavior: "deny", message: result.reason};
+  return {behavior: "ask", message: result.reason};
+}
+
+Note: This is a compatible pattern, not an official Anthropic, Claude, OpenAI, Cursor, or MCP integration.

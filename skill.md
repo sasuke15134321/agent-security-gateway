@@ -260,3 +260,43 @@ Free. Stateless. Does NOT execute shell commands.
 - recommended_controls: list of suggested next steps
 - agent_action_atom: Atom-compatible reference
 - can_feed_into: downstream workflows
+
+## Related External Control Materials Map
+
+Use the central External Control Materials Map when an AI agent needs to understand how this service fits into a broader AI-agent control flow.
+
+Map:
+https://ai-agent-payment-safety-stack.onrender.com/.well-known/external-control-materials.json
+
+## Skill: Agent Tool Approval
+
+### endpoint
+POST /api/tool-approval/check
+
+### pricing
+free / stateless
+
+### purpose
+Runtime approval decision before an AI agent uses a tool.
+
+### when_to_use
+- Before an AI agent calls Bash, Write, Edit, Delete, or MCP tool
+- When tool input originates from untrusted source or external data
+- When source context trust_level is untrusted or unknown
+- When a developer needs an evidence_id for a tool approval audit trail
+
+### when_not_to_use
+- As a replacement for a sandbox or runtime enforcement layer
+- To actually execute tools or shell commands
+- For official compliance audits or legal certifications
+
+### decision values
+- allow — tool use may proceed
+- deny — block immediately; blocked_patterns shows why
+- review_required — route to human review or sandbox
+
+### key output fields
+decision, risk_level, reason, recommended_action, tool_category, source_trust_status, blocked_patterns, evidence.evidence_id, evidence.input_hash, checks, agent_action_atom
+
+### non_goals
+Does not execute tools. Does not execute shell commands. Does not modify files. Does not read secrets. Not a sandbox. Not a runtime. Not an official standard. Not legal compliance software.
