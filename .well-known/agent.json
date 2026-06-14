@@ -1,0 +1,47 @@
+{
+  "name": "Agent Security Gateway",
+  "type": "tool_permission_execution",
+  "external_control_materials_map": {
+    "name": "External Control Materials Map v0.4",
+    "url": "https://ai-agent-payment-safety-stack.onrender.com/.well-known/external-control-materials.json",
+    "purpose": "AI-readable map showing how memory provenance, search result trust, tool permission, command execution, spending policy, budget checks, payment records, evidence packets, and payment evidence checks fit together.",
+    "version": "0.4"
+  },
+  "okf_style_bundle": {
+    "name": "External Control Materials Bundle v0.2",
+    "url": "https://ai-agent-payment-safety-stack.onrender.com/okf/index.md",
+    "purpose": "OKF-compatible Markdown documentation of 12 external control materials.",
+    "version": "0.2"
+  },
+  "role_in_flow": ["Tool Permission Policy (Step 3)", "Tool Approval Check (Step 4 - execution gate)", "Observability Data Boundary (Step 5)", "Command Execution Gate (Step 6)"],
+  "purpose": "Provides tool permission, execution approval, and command safety verification for AI agents.",
+  "live_url": "https://agent-security-gateway-1.onrender.com",
+  "core_gates": ["execution"],
+  "use_when": [
+    "an AI agent needs to verify tool or API execution permissions",
+    "a system needs to check tool schemas for unexpected changes",
+    "an AI agent requires approval before executing sensitive commands",
+    "a developer needs to enforce security policies for tool access",
+    "command safety assessment is needed before shell execution"
+  ],
+  "capabilities": [
+    "tool dry-run validation",
+    "tool response sanitization",
+    "schema drift detection",
+    "identity and scope checking",
+    "quota enforcement",
+    "metadata sanitization",
+    "command execution gating",
+    "threat detection"
+  ],
+  "non_goals": [
+    "not a sandbox",
+    "not a shell executor",
+    "not a model provider",
+    "not a payment protocol",
+    "not a wallet",
+    "not a settlement layer",
+    "not a legal compliance system",
+    "not an official standard"
+  ]
+}

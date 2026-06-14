@@ -163,14 +163,25 @@ Can feed into: Tool Permission Policy / Agent Spending Policy / Agent Action Ato
 
 Not a shell executor, not a sandbox runtime, not a model provider, not a wallet, not a payment protocol, not a settlement layer, not a legal compliance system, not an official standard.
 
-## External Control Materials Map
+## External Control Materials
 
-This service is part of the External Control Materials flow for AI-agent memory, tool permission, command execution, spending, token budget, payment decisions, and evidence workflows.
+This service provides the execution-side materials in the External Control Materials flow for AI agents.
 
-Recommended AI-readable map:
+It helps agents answer: Is this tool allowed? Should this tool use be approved? Is this command from untrusted data?
+
+Central AI-readable map:
 https://ai-agent-payment-safety-stack.onrender.com/.well-known/external-control-materials.json
 
-This service corresponds to Step 2: Tool Permission, Step 3: Observability Data Boundary, and Step 4: Command Execution Gate in the External Control Materials Map.
+OKF-style markdown knowledge bundle:
+https://ai-agent-payment-safety-stack.onrender.com/okf/index.md
+
+Core gates: trust (Search Result Trust Check) / execution (Tool Approval Check) / payment (Payment Review)
+
+Overall flow: Search Result Trust → Tool Permission → Tool Approval → Observability → Command Gate → Payment → Evidence
+
+Related OKF concepts:
+- https://ai-agent-payment-safety-stack.onrender.com/okf/materials/tool_approval_check.md
+- https://ai-agent-payment-safety-stack.onrender.com/okf/materials/command_execution_gate.md
 
 ## Agent Tool Approval API
 
