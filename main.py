@@ -2417,7 +2417,7 @@ class ToolApprovalCheckRequest(BaseModel):
 
 
 _TOOL_DENY_PATTERNS = [
-    "cat .env", "cat ~/.aws", "cat ~/.npmrc", "cat ~/.ssh",
+    "npx", "cat .env", "cat ~/.aws", "cat ~/.npmrc", "cat ~/.ssh",
     "gh auth token", "printenv", "private key", "secret key",
     "api key", "access token", "credential", "wallet private key",
     "seed phrase", "mnemonic", "curl | sh", "curl | bash",
