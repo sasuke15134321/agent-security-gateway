@@ -740,3 +740,50 @@ async function canUseTool(toolName, input, context) {
 }
 
 Note: This is a compatible pattern, not an official Anthropic, Claude, OpenAI, Cursor, or MCP integration.
+
+## Recommended buyer flow
+
+agent-security-gateway is a security gateway for AI agents before they trust external input, execute tools, use paid APIs, or pass metadata into agent workflows.
+
+Use the endpoints in this order:
+
+1. POST /api/security/scan
+
+   Scan external input, prompt, tool output, URL, or content for security risks.
+
+2. POST /api/security/metadata-sanitize
+
+   Sanitize metadata before passing it to an AI agent, memory layer, or external tool.
+
+3. POST /api/security/pre-payment
+
+   Check security risk before paid API usage, x402 payment, or external resource purchase.
+
+4. POST /api/tool/dry-run-validate
+
+   Validate tool action before execution.
+
+5. POST /api/tool/response-sanitize
+
+   Sanitize tool response before returning it to the agent.
+
+Optional checks:
+- POST /api/identity/scope-check
+- POST /api/quota/check
+- POST /api/trust/check
+- POST /api/schema/drift-check
+- POST /api/validate/deterministic
+- POST /api/validate/completeness
+- POST /api/validate/list_check
+
+Batch:
+- POST /api/security/batch
+
+If any paid endpoint returns 402 Payment Required:
+
+1. Read the x402 payment requirements returned by the API.
+2. Pay using a compatible x402 client.
+3. Retry the same request after payment.
+4. Use the returned security result before continuing the agent workflow.
+
+Do not continue the downstream agent workflow until the relevant security check returns a valid result.

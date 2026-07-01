@@ -627,7 +627,7 @@ async def x402_discovery_manifest():
 
 @app.post("/api/security/scan",
     summary="Security Scan - Detect prompt injection and threats",
-    description="Scans text for Japanese prompt injection, PII, suspicious patterns, and x402 payment threats. Use before any external API call or x402 payment.",
+    description="Primary security scan endpoint. Scans external input, prompt, tool output, URL, or content for prompt injection, PII, suspicious patterns, and x402 payment threats. Use before any external API call, tool execution, or x402 payment.",
     tags=["Security"],
     response_model=SecurityScanResponse,
     responses={402: {"description": "Payment Required"}},
@@ -1298,8 +1298,9 @@ async def trust_check(payload: TrustCheckRequest, request: Request):
     "/api/security/metadata-sanitize",
     summary="Metadata Sanitizer - Detect sensitive fields in payment metadata",
     description=(
+        "Primary metadata sanitization endpoint. "
         "Scans payment metadata (x402/USDC/JPYC/A2A) for PII, credentials, contract details, "
-        "and suspicious instructions before transmission. "
+        "and suspicious instructions before passing it to an AI agent, memory layer, or external tool. "
         "Returns safe_to_send_to_payment_metadata flag. "
         "Metadata content is never stored or logged."
     ),
