@@ -18,11 +18,19 @@ from typing import Optional, List, Dict, Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 BASE_URL = os.getenv(
     "SECURITY_API_BASE_URL", "https://agent-security-gateway.onrender.com"
 ).rstrip("/")
 PAYMENT_TOKEN = os.getenv("MCP_PAYMENT_TOKEN", "")
+
+PUBLIC_HOST = "agent-security-gateway.onrender.com"
+TRANSPORT_SECURITY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[PUBLIC_HOST, f"{PUBLIC_HOST}:*"],
+    allowed_origins=[f"https://{PUBLIC_HOST}", f"https://{PUBLIC_HOST}:*"],
+)
 
 
 class _MountedMCPApp:
@@ -68,8 +76,13 @@ class MountedFastMCP(FastMCP):
 
 # main.py mounts this ASGI app at /mcp. Keep the MCP app's internal
 # Streamable HTTP path at / so the public endpoint is exactly /mcp,
-# not /mcp/mcp.
-mcp = MountedFastMCP("Agent Security Gateway", streamable_http_path="/")
+# not /mcp/mcp. Keep DNS-rebinding protection enabled and explicitly
+# allow only this service's public Render hostname.
+mcp = MountedFastMCP(
+    "Agent Security Gateway",
+    streamable_http_path="/",
+    transport_security=TRANSPORT_SECURITY,
+)
 
 
 def _headers() -> dict:
