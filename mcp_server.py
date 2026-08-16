@@ -13,6 +13,7 @@ Payment  : MCP_PAYMENT_TOKEN env var → PAYMENT-SIGNATURE header
 
 import os
 import json
+import logging
 from typing import Optional, List, Dict, Any
 
 import httpx
@@ -27,6 +28,33 @@ PAYMENT_TOKEN = os.getenv("MCP_PAYMENT_TOKEN", "")
 # Streamable HTTP path at / so the public endpoint is exactly /mcp,
 # not /mcp/mcp.
 mcp = FastMCP("Agent Security Gateway", streamable_http_path="/")
+_mcp_session_context = None
+_mcp_lifecycle_installed = False
+
+
+def install_mcp_lifecycle(parent_app) -> None:
+    """Attach the MCP session manager lifecycle to an existing FastAPI app once."""
+    global _mcp_lifecycle_installed
+    if _mcp_lifecycle_installed:
+        return
+
+    async def _start_mcp_session_manager():
+        global _mcp_session_context
+        if _mcp_session_context is None:
+            _mcp_session_context = mcp.session_manager.run()
+            await _mcp_session_context.__aenter__()
+            logging.getLogger(__name__).info("MCP session manager started")
+
+    async def _stop_mcp_session_manager():
+        global _mcp_session_context
+        if _mcp_session_context is not None:
+            await _mcp_session_context.__aexit__(None, None, None)
+            _mcp_session_context = None
+            logging.getLogger(__name__).info("MCP session manager stopped")
+
+    parent_app.add_event_handler("startup", _start_mcp_session_manager)
+    parent_app.add_event_handler("shutdown", _stop_mcp_session_manager)
+    _mcp_lifecycle_installed = True
 
 
 def _headers() -> dict:
@@ -225,6 +253,17 @@ async def quota_check(
         "payment_amount_limit": payment_amount_limit,
     })
     return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+# main.py imports this module immediately before mounting /mcp. At that point
+# the parent FastAPI app already exists, so attach the MCP session lifecycle.
+try:
+    import sys
+    _parent_main = sys.modules.get("main")
+    if _parent_main is not None and hasattr(_parent_main, "app"):
+        install_mcp_lifecycle(_parent_main.app)
+except Exception as _lifecycle_err:
+    logging.getLogger(__name__).warning(f"MCP lifecycle registration failed: {_lifecycle_err}")
 
 
 # ── Entry point (stdio transport for local / Claude Code usage) ────────────────
