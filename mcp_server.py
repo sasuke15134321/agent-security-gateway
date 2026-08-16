@@ -23,7 +23,10 @@ BASE_URL = os.getenv(
 ).rstrip("/")
 PAYMENT_TOKEN = os.getenv("MCP_PAYMENT_TOKEN", "")
 
-mcp = FastMCP("Agent Security Gateway")
+# main.py mounts this ASGI app at /mcp. Keep the MCP app's internal
+# Streamable HTTP path at / so the public endpoint is exactly /mcp,
+# not /mcp/mcp.
+mcp = FastMCP("Agent Security Gateway", streamable_http_path="/")
 
 
 def _headers() -> dict:
