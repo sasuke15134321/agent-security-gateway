@@ -1,19 +1,30 @@
 # Agent Security Gateway
 
-Agent Pay / Safety Shelf — 5 lightweight APIs for AI agents.
+External execution-security boundary for AI agents.
 
-Use before or after external tool calls:
-- dry-run-validate: before executing tools
-- response-sanitize: after receiving tool output
-- drift-check: when tool schema may have changed
-- scope-check: before privileged actions
-- quota-check: before paid or resource-intensive actions
+Use this service when an AI agent is about to cross,
+or has just crossed, an external execution boundary.
 
-Entry: /api/security/scan (0.05 USDC) — general scan before API calls or payments.
-Metadata Safety: /api/security/metadata-sanitize (0.05 USDC) — scan payment metadata before transmission.
-Each Safety Check: 0.01 USDC per call.
+Use the relevant security check for the boundary involved.
 
-Use one check, or combine as a safety chain.
+Before execution, relevant checks may include:
+- scanning untrusted external input
+- validating proposed tool actions
+- checking scope before privileged actions
+- sanitizing payment metadata
+- performing pre-payment security checks
+- checking quota when resource limits matter
+
+After execution, relevant checks may include:
+- sanitizing tool responses
+- checking schema drift when an external tool contract may have changed
+
+This service provides independent external security checks.
+
+It does NOT itself guarantee that every workflow must pass through it.
+
+External check exists ≠ mandatory enforcement.
+Enforcement depends on the surrounding runtime, harness, or policy.
 
 ## Note
 
@@ -177,7 +188,7 @@ https://ai-agent-payment-safety-stack.onrender.com/okf/index.md
 
 Core gates: trust (Search Result Trust Check) / execution (Tool Approval Check) / payment (Payment Review)
 
-Overall flow: Search Result Trust → Tool Permission → Tool Approval → Observability → Command Gate → Payment → Evidence
+Security-side local flow: Search Result Trust → Tool Permission → Tool Approval → Observability → Command Gate → Payment → Evidence
 
 Related OKF concepts:
 - https://ai-agent-payment-safety-stack.onrender.com/okf/materials/tool_approval_check.md
@@ -235,4 +246,8 @@ If you receive 402 Payment Required:
 3. Retry the same request after payment.
 4. Use the returned security result before continuing the agent workflow.
 
-Do not continue the downstream agent workflow until the relevant security check returns a valid result.
+When a workflow is configured to use a security check,
+use its returned decision before continuing the corresponding
+downstream action.
+
+This API does not itself enforce that every workflow must call the check.
