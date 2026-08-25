@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Agent Security Gateway - MCP Server
-Exposes Agent Safety Check tools via MCP.
+Exposes 6 Agent Safety Check tools via MCP.
 
 Transport (standalone): stdio -> python mcp_server.py
 Transport (HTTP): mounted at /mcp inside FastAPI via main.py
@@ -74,6 +74,10 @@ class MountedFastMCP(FastMCP):
         return _MountedMCPApp(app, self.session_manager)
 
 
+# main.py mounts this ASGI app at /mcp. Keep the MCP app's internal
+# Streamable HTTP path at / so the public endpoint is exactly /mcp,
+# not /mcp/mcp. Keep DNS-rebinding protection enabled and explicitly
+# allow only this service's public Render hostname.
 mcp = MountedFastMCP(
     "Agent Security Gateway",
     streamable_http_path="/",
@@ -98,38 +102,108 @@ async def _post(path: str, payload: dict) -> dict:
 
 
 @mcp.tool()
-async def security_scan(content: str, content_type: Optional[str] = "prompt", sensitivity: Optional[str] = "medium") -> str:
-    result = await _post("/api/security/scan", {"content": content, "content_type": content_type, "sensitivity": sensitivity})
+async def security_scan(
+    content: str,
+    content_type: Optional[str] = "prompt",
+    sensitivity: Optional[str] = "medium",
+) -> str:
+    """Scan text for prompt injection, jailbreak attempts, PII, and data exfiltration."""
+    result = await _post("/api/security/scan", {
+        "content": content,
+        "content_type": content_type,
+        "sensitivity": sensitivity,
+    })
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
-async def dry_run_validate(tool_name: str, context: Optional[str] = "", tool_arguments: Optional[Dict[str, Any]] = None, agent_id: Optional[str] = "") -> str:
-    result = await _post("/api/tool/dry-run-validate", {"tool_name": tool_name, "context": context or "", "tool_arguments": tool_arguments or {}, "agent_id": agent_id or ""})
+async def dry_run_validate(
+    tool_name: str,
+    context: Optional[str] = "",
+    tool_arguments: Optional[Dict[str, Any]] = None,
+    agent_id: Optional[str] = "",
+) -> str:
+    """Validate a tool call before execution."""
+    result = await _post("/api/tool/dry-run-validate", {
+        "tool_name": tool_name,
+        "context": context or "",
+        "tool_arguments": tool_arguments or {},
+        "agent_id": agent_id or "",
+    })
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
-async def response_sanitize(response_content: str, tool_name: Optional[str] = "", agent_id: Optional[str] = "") -> str:
-    result = await _post("/api/tool/response-sanitize", {"response_content": response_content, "tool_name": tool_name or "", "agent_id": agent_id or ""})
+async def response_sanitize(
+    response_content: str,
+    tool_name: Optional[str] = "",
+    agent_id: Optional[str] = "",
+) -> str:
+    """Sanitize an external tool response before returning it to an AI agent."""
+    result = await _post("/api/tool/response-sanitize", {
+        "response_content": response_content,
+        "tool_name": tool_name or "",
+        "agent_id": agent_id or "",
+    })
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
-async def schema_drift_check(original_schema: Dict[str, Any], updated_schema: Dict[str, Any], tool_name: Optional[str] = "", agent_id: Optional[str] = "") -> str:
-    result = await _post("/api/schema/drift-check", {"original_schema": original_schema, "updated_schema": updated_schema, "tool_name": tool_name or "", "agent_id": agent_id or ""})
+async def schema_drift_check(
+    original_schema: Dict[str, Any],
+    updated_schema: Dict[str, Any],
+    tool_name: Optional[str] = "",
+    agent_id: Optional[str] = "",
+) -> str:
+    """Detect risky changes between two versions of a tool schema or OpenAPI spec."""
+    result = await _post("/api/schema/drift-check", {
+        "original_schema": original_schema,
+        "updated_schema": updated_schema,
+        "tool_name": tool_name or "",
+        "agent_id": agent_id or "",
+    })
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
-async def identity_scope_check(agent_id: str, requested_action: str, declared_scopes: Optional[List[str]] = None, declared_role: Optional[str] = "", target_resource: Optional[str] = "") -> str:
-    result = await _post("/api/identity/scope-check", {"agent_id": agent_id, "requested_action": requested_action, "declared_scopes": declared_scopes or [], "declared_role": declared_role or "", "target_resource": target_resource or ""})
+async def identity_scope_check(
+    agent_id: str,
+    requested_action: str,
+    declared_scopes: Optional[List[str]] = None,
+    declared_role: Optional[str] = "",
+    target_resource: Optional[str] = "",
+) -> str:
+    """Check whether an AI agent's declared scopes permit the requested action."""
+    result = await _post("/api/identity/scope-check", {
+        "agent_id": agent_id,
+        "requested_action": requested_action,
+        "declared_scopes": declared_scopes or [],
+        "declared_role": declared_role or "",
+        "target_resource": target_resource or "",
+    })
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
-async def quota_check(agent_id: str, tool_calls_used: Optional[int] = 0, tool_calls_limit: Optional[int] = 100, llm_calls_used: Optional[int] = 0, llm_calls_limit: Optional[int] = 50, payment_amount_used: Optional[float] = 0.0, payment_amount_limit: Optional[float] = 10.0) -> str:
-    result = await _post("/api/quota/check", {"agent_id": agent_id, "tool_calls_used": tool_calls_used, "tool_calls_limit": tool_calls_limit, "llm_calls_used": llm_calls_used, "llm_calls_limit": llm_calls_limit, "payment_amount_used": payment_amount_used, "payment_amount_limit": payment_amount_limit})
+async def quota_check(
+    agent_id: str,
+    tool_calls_used: Optional[int] = 0,
+    tool_calls_limit: Optional[int] = 100,
+    llm_calls_used: Optional[int] = 0,
+    llm_calls_limit: Optional[int] = 50,
+    payment_amount_used: Optional[float] = 0.0,
+    payment_amount_limit: Optional[float] = 10.0,
+) -> str:
+    """Check whether an AI agent is within its tool call, LLM call, and payment limits."""
+    result = await _post("/api/quota/check", {
+        "agent_id": agent_id,
+        "tool_calls_used": tool_calls_used,
+        "tool_calls_limit": tool_calls_limit,
+        "llm_calls_used": llm_calls_used,
+        "llm_calls_limit": llm_calls_limit,
+        "payment_amount_used": payment_amount_used,
+        "payment_amount_limit": payment_amount_limit,
+    })
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
